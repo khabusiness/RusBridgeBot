@@ -1,0 +1,2 @@
+"""RusBridge bot application package."""
+

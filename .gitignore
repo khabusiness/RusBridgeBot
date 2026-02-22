@@ -1,0 +1,12 @@
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+rusbridge.db
+*.sqlite
+*.sqlite3
+.env
+

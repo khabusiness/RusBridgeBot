@@ -1,0 +1,5 @@
+aiogram==3.22.0
+fastapi==0.116.1
+uvicorn==0.35.0
+apscheduler==3.11.0
+pytest==8.4.2

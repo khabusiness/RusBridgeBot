@@ -1,0 +1,80 @@
+[
+  {
+    "code": "gpt_plus_1m",
+    "name": "GPT Plus 1m",
+    "price_rub": 2990,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен доступ к аккаунту OpenAI.",
+      "Может потребоваться VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты сервиса (пример: https://pay.openai.com/...).",
+    "instruction_template": "Готово. Проверьте, что в аккаунте активен GPT Plus. Если неактивно, нажмите «Не активно / нужна помощь».",
+    "allowed_domains": [
+      "pay.openai.com"
+    ]
+  },
+  {
+    "code": "gpt_go_1m",
+    "name": "GPT Go 1m",
+    "price_rub": 1090,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен доступ к аккаунту OpenAI.",
+      "Может потребоваться VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты сервиса (пример: https://pay.openai.com/...).",
+    "instruction_template": "Готово. Проверьте статус подписки в аккаунте.",
+    "allowed_domains": [
+      "pay.openai.com"
+    ]
+  },
+  {
+    "code": "claude_pro_1m",
+    "name": "Claude Pro 1m",
+    "price_rub": 2490,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Claude.",
+      "Для входа может потребоваться VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Claude.",
+    "instruction_template": "Проверьте, что тариф Claude Pro активирован.",
+    "allowed_domains": [
+      "claude.ai",
+      "anthropic.com"
+    ]
+  },
+  {
+    "code": "nano_basic_1m",
+    "name": "Nano Basic 1m",
+    "price_rub": 1390,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт сервиса Nano.",
+      "При необходимости используйте VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Nano.",
+    "instruction_template": "Проверьте, что тариф Nano Basic активен.",
+    "allowed_domains": [
+      "nanobanana.ai",
+      "nanobanana.app"
+    ]
+  },
+  {
+    "code": "cursor_pro_1m",
+    "name": "Cursor Pro 1m",
+    "price_rub": 2990,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Cursor.",
+      "При необходимости используйте VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Cursor.",
+    "instruction_template": "Проверьте в аккаунте Cursor, что Pro активирован.",
+    "allowed_domains": [
+      "cursor.com"
+    ]
+  }
+]
+
