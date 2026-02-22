@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, RedirectResponse
 
 from app.bot.handlers import notify_payment_confirmed
 from app.runtime import AppContainer
@@ -46,5 +46,47 @@ def create_api(container: AppContainer, bot) -> FastAPI:
 
         return PlainTextResponse(content=f"OK{inv_id_raw}")
 
-    return app
+    @app.get("/payment/robokassa/fail")
+    async def robokassa_fail(request: Request) -> RedirectResponse:
+        params = {str(key): str(value) for key, value in request.query_params.items()}
+        inv_id_raw = params.get("InvId", "")
+        redirect_to = f"https://t.me/{container.settings.bot_username}"
+        order_id = None
 
+        if inv_id_raw.isdigit():
+            order = container.repository.get_order_by_payment_inv_id(int(inv_id_raw))
+            if order is not None:
+                order_id = order["order_id"]
+                redirect_to = f"https://t.me/{container.settings.bot_username}?start=payfail_{order_id}"
+
+        container.repository.log_event(
+            "robokassa_fail_redirect",
+            {
+                "inv_id": inv_id_raw,
+                "order_id": order_id,
+                "params": params,
+            },
+        )
+        return RedirectResponse(url=redirect_to, status_code=302)
+
+    @app.get("/debug/storage")
+    async def debug_storage() -> dict:
+        import os
+
+        storage_dir = "/data"
+        if not os.path.isdir(storage_dir):
+            return {"error": f"{storage_dir} is not mounted or does not exist", "files": []}
+
+        files = []
+        total_size = 0
+        for file_name in sorted(os.listdir(storage_dir)):
+            path = os.path.join(storage_dir, file_name)
+            if not os.path.isfile(path):
+                continue
+            size = os.path.getsize(path)
+            total_size += size
+            files.append({"file": file_name, "size_bytes": size})
+
+        return {"files": files, "total_size_bytes": total_size}
+
+    return app

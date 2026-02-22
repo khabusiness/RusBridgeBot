@@ -52,6 +52,7 @@ def _read_first(
 @dataclass(slots=True)
 class Settings:
     bot_token: str
+    bot_username: str
     admin_chat_id: int
     owner_chat_id: int | None
     database_path: str
@@ -94,6 +95,7 @@ def load_settings(env_file: str = ".env") -> Settings:
 
     settings = Settings(
         bot_token=bot_token or "",
+        bot_username=_read_first(env, "RUSBRIDGEBOT_USERNAME", default="RusBridgeBot") or "RusBridgeBot",
         admin_chat_id=int(admin_chat_id_raw or "0"),
         owner_chat_id=int(owner_chat_id_raw) if owner_chat_id_raw else None,
         database_path=_read_first(env, "SQLITE_DB_PATH", default="rusbridge.db") or "rusbridge.db",

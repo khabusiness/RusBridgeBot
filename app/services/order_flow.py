@@ -49,6 +49,12 @@ class OrderFlowService:
             description=f"{product.name} ({order['order_id']})",
         )
 
+    def get_payment_link_for_order(self, order: dict[str, Any]) -> PaymentLink:
+        product = self.products[order["product_code"]]
+        payment = self._build_payment_link(order=order, product=product)
+        self.repository.update_payment_fields(order["order_id"], out_sum=payment.out_sum)
+        return payment
+
     def create_or_resume_order(
         self,
         *,

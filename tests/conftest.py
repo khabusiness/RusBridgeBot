@@ -12,6 +12,7 @@ def settings(tmp_path: Path) -> Settings:
     db_path = tmp_path / "test.sqlite3"
     return Settings(
         bot_token="token",
+        bot_username="RusBridgeBot",
         admin_chat_id=-100123,
         owner_chat_id=1,
         database_path=str(db_path),
@@ -34,4 +35,3 @@ def settings(tmp_path: Path) -> Settings:
         reminders_interval_hours=6,
         timeout_scan_minutes=10,
     )
-

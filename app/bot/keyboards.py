@@ -43,10 +43,19 @@ def payment_test_confirm_keyboard(order_id: str) -> InlineKeyboardMarkup:
     )
 
 
-def payment_test_fail_keyboard(test_fail_url: str) -> InlineKeyboardMarkup:
+def payment_test_fail_keyboard(order_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🧪 Тест отказа оплаты", url=test_fail_url)],
+            [InlineKeyboardButton(text="🧪 Тест отказа оплаты", callback_data=f"test_fail:{order_id}")],
+        ]
+    )
+
+
+def payment_retry_keyboard(payment_url: str, order_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить снова", url=payment_url)],
+            [InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"cancel:{order_id}")],
         ]
     )
 

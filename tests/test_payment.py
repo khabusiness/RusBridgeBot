@@ -9,6 +9,7 @@ from app.services.payment import RobokassaService
 def _settings(test_mode: bool) -> Settings:
     return Settings(
         bot_token="token",
+        bot_username="RusBridgeBot",
         admin_chat_id=-100123,
         owner_chat_id=None,
         database_path=":memory:",
@@ -69,4 +70,3 @@ def test_verify_result_signature_false_for_bad_signature() -> None:
         "SignatureValue": "deadbeef",
     }
     assert not service.verify_result_signature(payload)
-

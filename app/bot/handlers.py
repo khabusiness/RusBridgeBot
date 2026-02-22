@@ -12,6 +12,7 @@ from app.bot.keyboards import (
     client_confirm_keyboard,
     confirm_product_keyboard,
     payment_keyboard,
+    payment_retry_keyboard,
     payment_test_confirm_keyboard,
     payment_test_fail_keyboard,
     product_picker_keyboard,
@@ -58,6 +59,20 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             link_preview_options=LinkPreviewOptions(is_disabled=True),
         )
 
+    async def send_wait_pay_resume(message: Message, order: dict[str, Any], *, reason: str | None = None) -> None:
+        product = container.products[order["product_code"]]
+        payment = container.order_flow.get_payment_link_for_order(order)
+        if reason:
+            await message.answer(reason)
+        await message.answer(
+            order_wait_pay_text(product, order["order_id"], container.settings.payment_test_mode),
+            reply_markup=payment_keyboard(payment.pay_url),
+        )
+        await message.answer(
+            "Если оплата не прошла, можно повторить или отменить заказ:",
+            reply_markup=payment_retry_keyboard(payment.pay_url, order["order_id"]),
+        )
+
     @router.message(CommandStart())
     async def handle_start(message: Message) -> None:
         payload = None
@@ -71,6 +86,26 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             source_key=payload,
         )
 
+        if payload and payload.startswith("payfail_"):
+            order_id = payload.removeprefix("payfail_")
+            order = container.repository.get_order(order_id)
+            if order is None or int(order["tg_id"]) != message.from_user.id:
+                await message.answer("Заказ не найден. Используйте /start для нового оформления.")
+                return
+            if order["status"] == OrderStatus.WAIT_PAY.value:
+                await send_wait_pay_resume(
+                    message,
+                    order,
+                    reason="Оплата не прошла или была отменена. Вы можете попробовать снова.",
+                )
+                return
+            await message.answer(
+                f"Order ID: {order['order_id']}\n"
+                f"Статус: {order['status']}\n"
+                f"Комментарий: {_order_status_hint(order['status'])}"
+            )
+            return
+
         if normalized_payload and normalized_payload in container.products:
             product = container.products[normalized_payload]
             await message.answer(
@@ -83,6 +118,18 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             await message.answer(
                 "Ключ оффера не найден. Выберите подписку из списка:",
                 reply_markup=product_picker_keyboard(container.products),
+            )
+            return
+
+        wait_pay_orders = container.repository.list_orders_by_user_and_statuses(
+            tg_id=message.from_user.id,
+            statuses=[OrderStatus.WAIT_PAY.value],
+        )
+        if wait_pay_orders:
+            await send_wait_pay_resume(
+                message,
+                wait_pay_orders[0],
+                reason="У вас есть незавершённая оплата. Продолжим её?",
             )
             return
 
@@ -196,7 +243,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             )
             await callback.message.answer(
                 "Тестовый шаг: сценарий неуспешной оплаты.",
-                reply_markup=payment_test_fail_keyboard(result.payment.fail_url),
+                reply_markup=payment_test_fail_keyboard(order["order_id"]),
             )
 
         if not result.reused_active_order:
@@ -293,6 +340,9 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         if not container.settings.payment_test_mode:
             await callback.answer("Кнопка доступна только в test mode", show_alert=True)
             return
+        if callback.message is None:
+            await callback.answer("Сообщение недоступно", show_alert=True)
+            return
         order_id = callback.data.split(":", 1)[1]
         order = container.repository.get_order(order_id)
         if order is None or int(order["tg_id"]) != callback.from_user.id:
@@ -308,6 +358,30 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             return
         await notify_payment_confirmed(container, bot, result.order)
         await callback.answer("Оплата подтверждена в тестовом режиме")
+
+    @router.callback_query(F.data.startswith("test_fail:"))
+    async def test_fail(callback: CallbackQuery) -> None:
+        if not container.settings.payment_test_mode:
+            await callback.answer("Кнопка доступна только в test mode", show_alert=True)
+            return
+        if callback.message is None:
+            await callback.answer("Сообщение недоступно", show_alert=True)
+            return
+        order_id = callback.data.split(":", 1)[1]
+        order = container.repository.get_order(order_id)
+        if order is None or int(order["tg_id"]) != callback.from_user.id:
+            await callback.answer("Заказ не найден", show_alert=True)
+            return
+        if order["status"] != OrderStatus.WAIT_PAY.value:
+            await callback.answer("Заказ уже не ждёт оплату", show_alert=True)
+            return
+
+        await send_wait_pay_resume(
+            callback.message,
+            order,
+            reason="Оплата не прошла или была отменена. Вы можете попробовать снова.",
+        )
+        await callback.answer("Показал сценарий отказа оплаты")
 
     @router.callback_query(F.data.startswith("cancel:"))
     async def cancel_order(callback: CallbackQuery) -> None:
@@ -411,7 +485,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             )
             await callback.message.answer(
                 "Тестовый шаг: сценарий неуспешной оплаты.",
-                reply_markup=payment_test_fail_keyboard(result.payment.fail_url),
+                reply_markup=payment_test_fail_keyboard(result.order["order_id"]),
             )
         if not result.reused_active_order:
             await send_admin(admin_new_lead(result.order, source_label=f"renew_{product_code}"))

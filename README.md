@@ -103,6 +103,7 @@ Telegram-бот для оформления подписок с оплатой �
 Основные:
 
 - `RUSBRIDGEBOT_TOKEN`
+- `RUSBRIDGEBOT_USERNAME`
 - `RUSBRIDGECANNAL_CHAT_ID`
 - `USER_CHAT_ID`
 - `ID_MAGAZIN_ROBOCASSA`
@@ -112,6 +113,10 @@ Telegram-бот для оформления подписок с оплатой �
 - `SUCCESS_URL`
 - `FAIL_URL`
 - `PAYMENT_TEST_MODE`
+
+Для отказа оплаты рекомендуется:
+
+- `FAIL_URL=https://api.rus-bridge.ru/payment/robokassa/fail`
 
 ## Запуск
 
