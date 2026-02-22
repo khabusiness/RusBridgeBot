@@ -102,7 +102,7 @@ Telegram-бот для оформления подписок с оплатой �
 
 Основные:
 
-- `RUSBRIDGEBOT_TOKKEN`
+- `RUSBRIDGEBOT_TOKEN`
 - `RUSBRIDGECANNAL_CHAT_ID`
 - `USER_CHAT_ID`
 - `ID_MAGAZIN_ROBOCASSA`

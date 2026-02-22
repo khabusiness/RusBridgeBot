@@ -80,7 +80,6 @@ def load_settings(env_file: str = ".env") -> Settings:
 
     bot_token = _read_first(
         env,
-        "RUSBRIDGEBOT_TOKKEN",
         "RUSBRIDGEBOT_TOKEN",
         required=True,
     )
