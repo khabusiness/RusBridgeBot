@@ -13,7 +13,7 @@ def format_product_requirements(product: Product) -> str:
 def product_confirmation_text(product: Product) -> str:
     return (
         f"Вы хотите оформить: {product.name}\n"
-        f"Цена: {product.price_rub} ₽\n"
+        f"Цена: {product.price_label()}\n"
         f"Срок: {product.duration_days} дней\n\n"
         f"{format_product_requirements(product)}\n\n"
         "Если у вас нет VPN/аккаунта - оформление невозможно.\n"
@@ -23,7 +23,14 @@ def product_confirmation_text(product: Product) -> str:
     )
 
 
-def order_wait_pay_text(product: Product, order_id: str, payment_test_mode: bool) -> str:
+def order_wait_pay_text(
+    product: Product,
+    order_id: str,
+    payment_test_mode: bool,
+    *,
+    price_rub: int | None = None,
+) -> str:
+    amount_rub = price_rub if price_rub is not None else product.price_rub
     extra = ""
     if payment_test_mode:
         extra = (
@@ -33,7 +40,7 @@ def order_wait_pay_text(product: Product, order_id: str, payment_test_mode: bool
     return (
         f"Заказ создан: {order_id}\n"
         f"Продукт: {product.name}\n"
-        f"Сумма: {product.price_rub} ₽\n\n"
+        f"Сумма: {amount_rub} ₽\n\n"
         "Оплата подтверждается автоматически - скриншот не нужен.\n"
         "Действие: нажмите «Оплатить»."
         f"{extra}"

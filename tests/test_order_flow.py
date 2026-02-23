@@ -26,6 +26,16 @@ def _write_products(path: Path) -> None:
                     "service_link_prompt": "send link",
                     "instruction_template": "template",
                     "allowed_domains": ["pay.openai.com"],
+                },
+                {
+                    "code": "openrouter",
+                    "name": "OpenRouter",
+                    "price_rub": 0,
+                    "duration_days": 30,
+                    "requirements": [],
+                    "service_link_prompt": "send link",
+                    "instruction_template": "template",
+                    "allowed_domains": ["openrouter.ai"],
                 }
             ]
         ),
@@ -105,3 +115,24 @@ def test_payment_webhook_is_idempotent(settings, tmp_path: Path) -> None:
     assert not second.updated
     assert second.reason == "already_processed"
 
+
+def test_create_order_with_custom_price(settings, tmp_path: Path) -> None:
+    _write_products(Path(settings.products_file))
+    init_db(settings.database_path)
+    repo = Repository(settings.database_path)
+    products = load_products(settings.products_file)
+    payment = RobokassaService(settings)
+    flow = OrderFlowService(repo, products, payment, settings)
+
+    created = flow.create_or_resume_order(
+        tg_id=12,
+        username="client",
+        source_key="openrouter:25usd",
+        product_code="openrouter",
+        custom_price_rub=2600,
+        custom_product_name="OpenRouter (25 USD)",
+    )
+
+    assert created.order["price_rub"] == 2600
+    assert created.order["product_name"] == "OpenRouter (25 USD)"
+    assert created.payment.out_sum == "2600.00"

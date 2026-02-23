@@ -33,8 +33,11 @@ from app.services.link_validator import validate_service_link
 
 
 PRODUCT_ALIASES = {
-    "nano_banana_basic_1m": "nano_basic_1m",
+    "nano_basic_1m": "nano_banana_basic_1m",
 }
+OPENROUTER_CODE = "openrouter"
+OPENROUTER_MARKUP = 1.3
+OPENROUTER_RUB_RATE = 80
 
 
 def _order_status_hint(status: str) -> str:
@@ -50,6 +53,17 @@ def _order_status_hint(status: str) -> str:
 
 def build_router(container: AppContainer, bot: Bot) -> Router:
     router = Router()
+    pending_openrouter_input: set[int] = set()
+
+    def _openrouter_price_rub(usd_amount: int) -> int:
+        return int(usd_amount * OPENROUTER_MARKUP * OPENROUTER_RUB_RATE)
+
+    async def ask_openrouter_amount(message: Message) -> None:
+        pending_openrouter_input.add(message.from_user.id)
+        await message.answer(
+            "Сколько долларов положить в OpenRouter?\n"
+            "Введите целое число в USD (например: 10)."
+        )
 
     async def send_admin(text: str, *, reply_markup: Any | None = None) -> None:
         await bot.send_message(
@@ -65,7 +79,12 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         if reason:
             await message.answer(reason)
         await message.answer(
-            order_wait_pay_text(product, order["order_id"], container.settings.payment_test_mode),
+            order_wait_pay_text(
+                product,
+                order["order_id"],
+                container.settings.payment_test_mode,
+                price_rub=int(order["price_rub"]),
+            ),
             reply_markup=payment_keyboard(payment.pay_url),
         )
         await message.answer(
@@ -108,6 +127,9 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
 
         if normalized_payload and normalized_payload in container.products:
             product = container.products[normalized_payload]
+            if product.code == OPENROUTER_CODE:
+                await ask_openrouter_amount(message)
+                return
             await message.answer(
                 product_confirmation_text(product),
                 reply_markup=confirm_product_keyboard(product.code),
@@ -163,9 +185,19 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data.startswith("product:"))
     async def choose_product(callback: CallbackQuery) -> None:
         product_code = callback.data.split(":", 1)[1]
+        product_code = PRODUCT_ALIASES.get(product_code, product_code)
         product = container.products.get(product_code)
         if not product:
             await callback.answer("Продукт не найден", show_alert=True)
+            return
+
+        if product.code == OPENROUTER_CODE:
+            pending_openrouter_input.add(callback.from_user.id)
+            await callback.message.answer(
+                "Сколько долларов положить в OpenRouter?\n"
+                "Введите целое число в USD (например: 10)."
+            )
+            await callback.answer()
             return
 
         await callback.message.answer(
@@ -197,9 +229,18 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data.startswith("confirm:"))
     async def confirm_product(callback: CallbackQuery) -> None:
         product_code = callback.data.split(":", 1)[1]
+        product_code = PRODUCT_ALIASES.get(product_code, product_code)
         product = container.products.get(product_code)
         if product is None:
             await callback.answer("Продукт не найден", show_alert=True)
+            return
+        if product.code == OPENROUTER_CODE:
+            pending_openrouter_input.add(callback.from_user.id)
+            await callback.message.answer(
+                "Сколько долларов положить в OpenRouter?\n"
+                "Введите целое число в USD (например: 10)."
+            )
+            await callback.answer()
             return
 
         container.repository.upsert_user(
@@ -226,7 +267,12 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             return
 
         await callback.message.answer(
-            order_wait_pay_text(product, order["order_id"], container.settings.payment_test_mode),
+            order_wait_pay_text(
+                product,
+                order["order_id"],
+                container.settings.payment_test_mode,
+                price_rub=int(order["price_rub"]),
+            ),
             reply_markup=payment_keyboard(result.payment.pay_url),
         )
         await callback.message.answer(
@@ -456,6 +502,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data.startswith("renew:"))
     async def renew_order(callback: CallbackQuery) -> None:
         product_code = callback.data.split(":", 1)[1]
+        product_code = PRODUCT_ALIASES.get(product_code, product_code)
         product = container.products.get(product_code)
         if product is None:
             await callback.answer("Продукт не найден", show_alert=True)
@@ -468,7 +515,12 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             product_code=product_code,
         )
         await callback.message.answer(
-            order_wait_pay_text(product, result.order["order_id"], container.settings.payment_test_mode),
+            order_wait_pay_text(
+                product,
+                result.order["order_id"],
+                container.settings.payment_test_mode,
+                price_rub=int(result.order["price_rub"]),
+            ),
             reply_markup=payment_keyboard(result.payment.pay_url),
         )
         await callback.message.answer(
@@ -495,11 +547,77 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     async def handle_private_text(message: Message) -> None:
         if not message.text:
             return
+        text = message.text.strip()
         container.repository.upsert_user(
             tg_id=message.from_user.id,
             username=message.from_user.username,
             source_key=None,
         )
+
+        if message.from_user.id in pending_openrouter_input:
+            if not text.isdigit():
+                await message.answer("Нужно ввести целое число в долларах. Пример: 10")
+                return
+            usd_amount = int(text)
+            if usd_amount <= 0:
+                await message.answer("Сумма должна быть больше нуля. Пример: 10")
+                return
+
+            pending_openrouter_input.discard(message.from_user.id)
+            product = container.products.get(OPENROUTER_CODE)
+            if product is None:
+                await message.answer("Продукт временно недоступен, попробуйте позже.")
+                return
+
+            price_rub = _openrouter_price_rub(usd_amount)
+            result = container.order_flow.create_or_resume_order(
+                tg_id=message.from_user.id,
+                username=message.from_user.username,
+                source_key=f"{OPENROUTER_CODE}:{usd_amount}usd",
+                product_code=OPENROUTER_CODE,
+                custom_price_rub=price_rub,
+                custom_product_name=f"{product.name} ({usd_amount} USD)",
+            )
+            order = result.order
+            if result.reused_active_order and order["status"] != OrderStatus.WAIT_PAY.value:
+                await message.answer(
+                    "У вас уже есть активный заказ по этому продукту.\n"
+                    f"Order ID: {order['order_id']}\n"
+                    f"Статус: {_order_status_hint(order['status'])}"
+                )
+                return
+
+            await message.answer(
+                f"Расчет: {usd_amount} * {OPENROUTER_MARKUP} * {OPENROUTER_RUB_RATE} = {price_rub} ₽"
+            )
+            await message.answer(
+                order_wait_pay_text(
+                    product,
+                    order["order_id"],
+                    container.settings.payment_test_mode,
+                    price_rub=int(order["price_rub"]),
+                ),
+                reply_markup=payment_keyboard(result.payment.pay_url),
+            )
+            await message.answer(
+                f"Заказ {order['order_id']} отслеживается автоматически.\n"
+                "Если нужно, проверьте вручную: /status " + order["order_id"]
+            )
+            await message.answer(
+                "Если хотите отменить до подтверждения оплаты: /cancel " + order["order_id"]
+            )
+            if container.settings.payment_test_mode:
+                await message.answer(
+                    "Тестовый шаг: подтвердите успешную оплату.",
+                    reply_markup=payment_test_confirm_keyboard(order["order_id"]),
+                )
+                await message.answer(
+                    "Тестовый шаг: сценарий неуспешной оплаты.",
+                    reply_markup=payment_test_fail_keyboard(order["order_id"]),
+                )
+            if not result.reused_active_order:
+                await send_admin(admin_new_lead(order, source_label=order.get("source_key") or "unknown"))
+            return
 
         waiting = container.repository.list_orders_by_user_and_statuses(
             tg_id=message.from_user.id,
@@ -512,7 +630,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             return
 
         target_order = waiting[0]
-        raw = message.text.strip()
+        raw = text
         if len(waiting) > 1 and " " in raw:
             first, possible_url = raw.split(" ", 1)
             maybe = container.repository.get_order(first.strip())

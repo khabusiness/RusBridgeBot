@@ -8,10 +8,12 @@ from app.products import Product
 def product_picker_keyboard(products: dict[str, Product]) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for code, product in products.items():
+        if product.hidden:
+            continue
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=f"{product.name} - {product.price_rub} ₽",
+                    text=f"{product.name} - {product.price_label()}",
                     callback_data=f"product:{code}",
                 )
             ]
@@ -84,6 +86,6 @@ def admin_order_keyboard(order_id: str) -> InlineKeyboardMarkup:
 def renew_keyboard(product_code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔁 Продлить", callback_data=f"renew:{product_code}")],
+            [InlineKeyboardButton(text="🔃 Продлить", callback_data=f"renew:{product_code}")],
         ]
     )

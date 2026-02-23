@@ -41,17 +41,16 @@ class OrderFlowService:
     def get_product(self, product_code: str) -> Product | None:
         return self.products.get(product_code)
 
-    def _build_payment_link(self, order: dict[str, Any], product: Product) -> PaymentLink:
+    def _build_payment_link(self, order: dict[str, Any]) -> PaymentLink:
         return self.payment_service.create_payment_link(
             order_id=order["order_id"],
             inv_id=int(order["payment_inv_id"]),
-            amount_rub=product.price_rub,
-            description=f"{product.name} ({order['order_id']})",
+            amount_rub=int(order["price_rub"]),
+            description=f"{order['product_name']} ({order['order_id']})",
         )
 
     def get_payment_link_for_order(self, order: dict[str, Any]) -> PaymentLink:
-        product = self.products[order["product_code"]]
-        payment = self._build_payment_link(order=order, product=product)
+        payment = self._build_payment_link(order=order)
         self.repository.update_payment_fields(order["order_id"], out_sum=payment.out_sum)
         return payment
 
@@ -62,16 +61,20 @@ class OrderFlowService:
         username: str | None,
         source_key: str | None,
         product_code: str,
+        custom_price_rub: int | None = None,
+        custom_product_name: str | None = None,
     ) -> CreateOrderResult:
         product = self.products[product_code]
+        target_price_rub = custom_price_rub if custom_price_rub is not None else product.price_rub
+        target_product_name = custom_product_name or product.name
         try:
             order = self.repository.create_order(
                 tg_id=tg_id,
                 username=username,
                 source_key=source_key,
                 product_code=product.code,
-                product_name=product.name,
-                price_rub=product.price_rub,
+                product_name=target_product_name,
+                price_rub=target_price_rub,
                 wait_pay_timeout_minutes=self.settings.wait_pay_timeout_minutes,
             )
             order = self.repository.transition_order(
@@ -91,7 +94,7 @@ class OrderFlowService:
             order = existing
             reused = True
 
-        payment = self._build_payment_link(order=order, product=product)
+        payment = self._build_payment_link(order=order)
         self.repository.update_payment_fields(order["order_id"], out_sum=payment.out_sum)
         return CreateOrderResult(order=order, payment=payment, reused_active_order=reused)
 
