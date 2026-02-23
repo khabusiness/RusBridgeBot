@@ -1,7 +1,7 @@
 [
   {
     "code": "gpt_go_1m",
-    "name": "GPT Go 1m",
+    "name": "GPT Go 1 month",
     "price_rub": 900,
     "duration_days": 30,
     "requirements": [
@@ -16,7 +16,7 @@
   },
   {
     "code": "gpt_plus_1m",
-    "name": "GPT Plus 1m",
+    "name": "GPT Plus 1 month",
     "price_rub": 2600,
     "duration_days": 30,
     "requirements": [
@@ -24,14 +24,14 @@
       "Может потребоваться VPN."
     ],
     "service_link_prompt": "Пришлите ссылку оплаты сервиса (например: https://pay.openai.com/...).",
-    "instruction_template": "Готово. Проверьте, что в аккаунте активен GPT Plus. Если неактивно, нажмите «Не активно / нужна помощь».",
+    "instruction_template": "Готово. Проверьте, что в аккаунте активен GPT Plus. Если есть вопросы нажмите «Вопрос оператору».",
     "allowed_domains": [
       "pay.openai.com"
     ]
   },
   {
     "code": "gpt_pro_1m",
-    "name": "GPT Pro 1m",
+    "name": "GPT Pro 1 month",
     "price_rub": 22000,
     "duration_days": 30,
     "requirements": [
@@ -62,7 +62,7 @@
   },
   {
     "code": "nano_banana_basic_1m",
-    "name": "Nano Banana Basic 1m",
+    "name": "Nano Banana Basic 1 month",
     "price_rub": 1300,
     "duration_days": 30,
     "requirements": [
@@ -78,7 +78,7 @@
   },
   {
     "code": "nano_banana_pro_1m",
-    "name": "Nano Banana Pro 1m",
+    "name": "Nano Banana Pro 1 month",
     "price_rub": 3200,
     "duration_days": 30,
     "requirements": [
@@ -94,7 +94,7 @@
   },
   {
     "code": "nano_banana_max_1m",
-    "name": "Nano Banana Max 1m",
+    "name": "Nano Banana Max 1 month",
     "price_rub": 8000,
     "duration_days": 30,
     "requirements": [
@@ -110,7 +110,7 @@
   },
   {
     "code": "claude_pro_1m",
-    "name": "Claude Pro 1m",
+    "name": "Claude Pro 1 month",
     "price_rub": 2000,
     "duration_days": 30,
     "requirements": [
@@ -126,7 +126,7 @@
   },
   {
     "code": "claude_max_1m",
-    "name": "Claude Max 1m",
+    "name": "Claude Max 1 month",
     "price_rub": 11000,
     "duration_days": 30,
     "requirements": [
@@ -142,7 +142,7 @@
   },
   {
     "code": "cursor_pro_1m",
-    "name": "Cursor Pro 1m",
+    "name": "Cursor Pro 1 month",
     "price_rub": 2500,
     "duration_days": 30,
     "requirements": [
@@ -157,7 +157,7 @@
   },
   {
     "code": "copilot_pro_1m",
-    "name": "Copilot Pro 1m",
+    "name": "Copilot Pro 1 month",
     "price_rub": 1200,
     "duration_days": 30,
     "requirements": [
@@ -174,7 +174,7 @@
   },
   {
     "code": "copilot_pro_1y",
-    "name": "Copilot Pro 1y",
+    "name": "Copilot Pro 1 year",
     "price_rub": 10000,
     "duration_days": 354,
     "requirements": [
@@ -191,7 +191,7 @@
   },
   {
     "code": "copilot_pro_plus_1m",
-    "name": "Copilot Pro Plus 1m",
+    "name": "Copilot Pro Plus 1 month",
     "price_rub": 3800,
     "duration_days": 30,
     "requirements": [
@@ -204,21 +204,5 @@
       "github.com",
       "copilot.microsoft.com"
     ]
-  },
-  {
-    "code": "nano_basic_1m",
-    "name": "Nano Basic 1m (legacy)",
-    "price_rub": 1300,
-    "duration_days": 30,
-    "requirements": [
-      "Нужен аккаунт Nano Banana."
-    ],
-    "service_link_prompt": "Пришлите ссылку оплаты Nano Banana.",
-    "instruction_template": "Проверьте, что тариф Nano Banana Basic активен.",
-    "allowed_domains": [
-      "nanobanana.ai",
-      "nanobanana.app"
-    ],
-    "hidden": true
   }
 ]

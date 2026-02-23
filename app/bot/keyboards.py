@@ -2,13 +2,37 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from app.products import Product
+from app.products import PROVIDER_ORDER, PROVIDER_TITLES, Product
 
 
-def product_picker_keyboard(products: dict[str, Product]) -> InlineKeyboardMarkup:
+def provider_picker_keyboard(products: dict[str, Product]) -> InlineKeyboardMarkup:
+    available = {product.provider for product in products.values() if not product.hidden}
+    rows: list[list[InlineKeyboardButton]] = []
+    for provider in PROVIDER_ORDER:
+        if provider not in available:
+            continue
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=PROVIDER_TITLES.get(provider, provider.title()),
+                    callback_data=f"provider:{provider}",
+                )
+            ]
+        )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def product_picker_keyboard(
+    products: dict[str, Product],
+    *,
+    provider: str | None = None,
+    include_back: bool = False,
+) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     for code, product in products.items():
         if product.hidden:
+            continue
+        if provider and product.provider != provider:
             continue
         rows.append(
             [
@@ -18,6 +42,8 @@ def product_picker_keyboard(products: dict[str, Product]) -> InlineKeyboardMarku
                 )
             ]
         )
+    if include_back:
+        rows.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="providers")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -66,7 +92,7 @@ def client_confirm_keyboard(order_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="✅ Активно", callback_data=f"client_ok:{order_id}")],
-            [InlineKeyboardButton(text="❌ Не активно / нужна помощь", callback_data=f"client_fail:{order_id}")],
+            [InlineKeyboardButton(text="❓ Вопрос оператору", callback_data=f"client_fail:{order_id}")],
         ]
     )
 

@@ -15,6 +15,7 @@ from app.bot.keyboards import (
     payment_retry_keyboard,
     payment_test_confirm_keyboard,
     payment_test_fail_keyboard,
+    provider_picker_keyboard,
     product_picker_keyboard,
     renew_keyboard,
 )
@@ -28,6 +29,7 @@ from app.bot.texts import (
     product_confirmation_text,
 )
 from app.enums import OrderStatus
+from app.products import PROVIDER_TITLES
 from app.runtime import AppContainer
 from app.services.link_validator import validate_service_link
 
@@ -63,6 +65,12 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         await message.answer(
             "Сколько долларов положить в OpenRouter?\n"
             "Введите целое число в USD (например: 10)."
+        )
+
+    async def send_provider_menu(message: Message, *, text: str = "Что оформить?") -> None:
+        await message.answer(
+            text,
+            reply_markup=provider_picker_keyboard(container.products),
         )
 
     async def send_admin(text: str, *, reply_markup: Any | None = None) -> None:
@@ -139,7 +147,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         if payload and normalized_payload not in container.products:
             await message.answer(
                 "Ключ оффера не найден. Выберите подписку из списка:",
-                reply_markup=product_picker_keyboard(container.products),
+                reply_markup=provider_picker_keyboard(container.products),
             )
             return
 
@@ -157,7 +165,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
 
         await message.answer(
             "Что оформить?",
-            reply_markup=product_picker_keyboard(container.products),
+            reply_markup=provider_picker_keyboard(container.products),
         )
 
     @router.message(Command("help"))
@@ -206,11 +214,36 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         )
         await callback.answer()
 
+    @router.callback_query(F.data.startswith("provider:"))
+    async def choose_provider(callback: CallbackQuery) -> None:
+        provider = callback.data.split(":", 1)[1]
+        has_products = any(
+            not product.hidden and product.provider == provider for product in container.products.values()
+        )
+        if not has_products:
+            await callback.answer("В этой категории пока нет тарифов", show_alert=True)
+            return
+
+        provider_title = PROVIDER_TITLES.get(provider, provider.title())
+        await callback.message.answer(
+            f"Выберите подписку: {provider_title}",
+            reply_markup=product_picker_keyboard(container.products, provider=provider, include_back=True),
+        )
+        await callback.answer()
+
+    @router.callback_query(F.data == "providers")
+    async def show_providers(callback: CallbackQuery) -> None:
+        await callback.message.answer(
+            "Что оформить?",
+            reply_markup=provider_picker_keyboard(container.products),
+        )
+        await callback.answer()
+
     @router.callback_query(F.data == "choose_other")
     async def choose_other(callback: CallbackQuery) -> None:
         await callback.message.answer(
             "Выберите подписку:",
-            reply_markup=product_picker_keyboard(container.products),
+            reply_markup=provider_picker_keyboard(container.products),
         )
         await callback.answer()
 
@@ -587,9 +620,6 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
                 )
                 return
 
-            await message.answer(
-                f"Расчет: {usd_amount} * {OPENROUTER_MARKUP} * {OPENROUTER_RUB_RATE} = {price_rub} ₽"
-            )
             await message.answer(
                 order_wait_pay_text(
                     product,
