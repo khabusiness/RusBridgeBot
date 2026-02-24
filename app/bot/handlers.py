@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Any
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, LinkPreviewOptions, Message
+from aiogram.types import CallbackQuery, FSInputFile, LinkPreviewOptions, Message
 
 from app.bot.keyboards import (
     admin_order_keyboard,
@@ -35,11 +36,24 @@ from app.services.link_validator import validate_service_link
 
 
 PRODUCT_ALIASES = {
-    "nano_basic_1m": "nano_banana_basic_1m",
+    "nano_basic_1m": "nano_banana",
+    "nano_banana_basic_1m": "nano_banana",
+    "nano_banana_pro_1m": "nano_banana",
+    "nano_banana_max_1m": "nano_banana",
 }
 OPENROUTER_CODE = "openrouter"
-OPENROUTER_MARKUP = 1.3
-OPENROUTER_RUB_RATE = 80
+NANO_BANANA_CODE = "nano_banana"
+VARIABLE_PRICE_MARKUP = 1.3
+VARIABLE_PRICE_RUB_RATE = 80
+VARIABLE_PRICE_PRODUCT_CODES = {OPENROUTER_CODE, NANO_BANANA_CODE}
+NANO_GUIDE_PATH = Path("data/Nano.jpg")
+DEFAULT_POST_PAYMENT_GUIDE_PATH = Path("data/GPT.jpg")
+POST_PAYMENT_PROVIDER_GUIDE_BY_PROVIDER: dict[str, Path] = {
+    "gpt": Path("data/GPT.jpg"),
+    "claude": Path("data/Cloude.jpg"),
+    "cursor": Path("data/Cursore.jpg"),
+    "copilot": Path("data/Copilot.jpg"),
+}
 
 
 def _order_status_hint(status: str) -> str:
@@ -55,15 +69,30 @@ def _order_status_hint(status: str) -> str:
 
 def build_router(container: AppContainer, bot: Bot) -> Router:
     router = Router()
-    pending_openrouter_input: set[int] = set()
+    pending_variable_price_input: dict[int, str] = {}
 
-    def _openrouter_price_rub(usd_amount: int) -> int:
-        return int(usd_amount * OPENROUTER_MARKUP * OPENROUTER_RUB_RATE)
+    def _variable_price_rub(usd_amount: int) -> int:
+        return int(usd_amount * VARIABLE_PRICE_MARKUP * VARIABLE_PRICE_RUB_RATE)
 
-    async def ask_openrouter_amount(message: Message) -> None:
-        pending_openrouter_input.add(message.from_user.id)
+    async def ask_variable_amount(message: Message, product_code: str) -> None:
+        pending_variable_price_input[message.from_user.id] = product_code
+        if product_code == NANO_BANANA_CODE:
+            nano_hint = (
+                "Для Nano Banana:\n"
+                "Зайдите на любой из сайтов:\n"
+                "https://nanobanana.im/\n"
+                "https://nanobanapro.com/\n"
+                "https://www.nano-banana.ai/\n"
+                "https://nano-banana.io/\n"
+                "или аналогичный сайт Nano Banana.\n\n"
+                "Выберите подписку или разовый пакет, затем введите сумму в долларах."
+            )
+            if NANO_GUIDE_PATH.exists():
+                await message.answer_photo(photo=FSInputFile(str(NANO_GUIDE_PATH)), caption=nano_hint)
+            else:
+                await message.answer(nano_hint)
         await message.answer(
-            "Сколько долларов положить в OpenRouter?\n"
+            "Сколько долларов положить?\n"
             "Введите целое число в USD (например: 10)."
         )
 
@@ -135,8 +164,8 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
 
         if normalized_payload and normalized_payload in container.products:
             product = container.products[normalized_payload]
-            if product.code == OPENROUTER_CODE:
-                await ask_openrouter_amount(message)
+            if product.code in VARIABLE_PRICE_PRODUCT_CODES:
+                await ask_variable_amount(message, product.code)
                 return
             await message.answer(
                 product_confirmation_text(product),
@@ -178,7 +207,8 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             "Команды:\n"
             "/status [order_id] - статус заказа\n"
             "/cancel <order_id> - отмена заказа (если доступно)\n"
-            "/operator - позвать оператора"
+            "/operator - позвать оператора\n"
+            "Или напишите: МОД: ваш вопрос"
         )
 
     @router.message(Command("operator"))
@@ -190,6 +220,43 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             f"(id: {message.from_user.id})"
         )
 
+    @router.message(Command("msg"))
+    async def admin_send_message(message: Message) -> None:
+        if message.chat.id != container.settings.admin_chat_id:
+            await message.answer("Команда доступна только в админ-чате.")
+            return
+        if not message.text:
+            await message.answer("Формат: /msg <tg_id|order_id> <текст>")
+            return
+
+        parts = message.text.split(" ", 2)
+        if len(parts) < 3 or not parts[1].strip() or not parts[2].strip():
+            await message.answer("Формат: /msg <tg_id|order_id> <текст>")
+            return
+
+        target = parts[1].strip()
+        text_to_client = parts[2].strip()
+        target_tg_id: int | None = None
+
+        if target.upper().startswith("RB-"):
+            order = container.repository.get_order(target)
+            if order is None:
+                await message.answer("Order ID не найден.")
+                return
+            target_tg_id = int(order["tg_id"])
+        else:
+            try:
+                target_tg_id = int(target)
+            except ValueError:
+                await message.answer("Укажите корректный tg_id или Order ID (RB-...).")
+                return
+
+        await bot.send_message(
+            chat_id=target_tg_id,
+            text="Сообщение от оператора:\n" + text_to_client,
+        )
+        await message.answer(f"Отправлено пользователю {target_tg_id}.")
+
     @router.callback_query(F.data.startswith("product:"))
     async def choose_product(callback: CallbackQuery) -> None:
         product_code = callback.data.split(":", 1)[1]
@@ -199,12 +266,11 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             await callback.answer("Продукт не найден", show_alert=True)
             return
 
-        if product.code == OPENROUTER_CODE:
-            pending_openrouter_input.add(callback.from_user.id)
-            await callback.message.answer(
-                "Сколько долларов положить в OpenRouter?\n"
-                "Введите целое число в USD (например: 10)."
-            )
+        if product.code in VARIABLE_PRICE_PRODUCT_CODES:
+            if callback.message is None:
+                await callback.answer("Сообщение недоступно", show_alert=True)
+                return
+            await ask_variable_amount(callback.message, product.code)
             await callback.answer()
             return
 
@@ -267,12 +333,11 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         if product is None:
             await callback.answer("Продукт не найден", show_alert=True)
             return
-        if product.code == OPENROUTER_CODE:
-            pending_openrouter_input.add(callback.from_user.id)
-            await callback.message.answer(
-                "Сколько долларов положить в OpenRouter?\n"
-                "Введите целое число в USD (например: 10)."
-            )
+        if product.code in VARIABLE_PRICE_PRODUCT_CODES:
+            if callback.message is None:
+                await callback.answer("Сообщение недоступно", show_alert=True)
+                return
+            await ask_variable_amount(callback.message, product.code)
             await callback.answer()
             return
 
@@ -587,7 +652,44 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             source_key=None,
         )
 
-        if message.from_user.id in pending_openrouter_input:
+        lower_text = text.lower()
+        if lower_text.startswith("мод:") or lower_text.startswith("mod:"):
+            question = text.split(":", 1)[1].strip()
+            if not question:
+                await message.answer("После МОД: напишите ваш вопрос оператору.")
+                return
+
+            active_orders = container.repository.list_orders_by_user_and_statuses(
+                tg_id=message.from_user.id,
+                statuses=[
+                    OrderStatus.NEW.value,
+                    OrderStatus.WAIT_PAY.value,
+                    OrderStatus.PAID.value,
+                    OrderStatus.WAIT_SERVICE_LINK.value,
+                    OrderStatus.READY_FOR_OPERATOR.value,
+                    OrderStatus.IN_PROGRESS.value,
+                    OrderStatus.DONE.value,
+                    OrderStatus.WAIT_CLIENT_CONFIRM.value,
+                ],
+            )
+            order_context = ""
+            if active_orders:
+                order_context = (
+                    f"\nOrder ID: {active_orders[0]['order_id']}"
+                    f"\nСтатус: {active_orders[0]['status']}"
+                )
+
+            await send_admin(
+                "CLIENT QUESTION\n"
+                f"Пользователь: @{message.from_user.username or 'без_username'} (id: {message.from_user.id})"
+                f"{order_context}\n"
+                f"Сообщение: {question}"
+            )
+            await message.answer("Сообщение отправлено оператору. Ожидайте ответ в этом чате.")
+            return
+
+        pending_product_code = pending_variable_price_input.get(message.from_user.id)
+        if pending_product_code:
             if not text.isdigit():
                 await message.answer("Нужно ввести целое число в долларах. Пример: 10")
                 return
@@ -596,18 +698,18 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
                 await message.answer("Сумма должна быть больше нуля. Пример: 10")
                 return
 
-            pending_openrouter_input.discard(message.from_user.id)
-            product = container.products.get(OPENROUTER_CODE)
+            pending_variable_price_input.pop(message.from_user.id, None)
+            product = container.products.get(pending_product_code)
             if product is None:
                 await message.answer("Продукт временно недоступен, попробуйте позже.")
                 return
 
-            price_rub = _openrouter_price_rub(usd_amount)
+            price_rub = _variable_price_rub(usd_amount)
             result = container.order_flow.create_or_resume_order(
                 tg_id=message.from_user.id,
                 username=message.from_user.username,
-                source_key=f"{OPENROUTER_CODE}:{usd_amount}usd",
-                product_code=OPENROUTER_CODE,
+                source_key=f"{pending_product_code}:{usd_amount}usd",
+                product_code=pending_product_code,
                 custom_price_rub=price_rub,
                 custom_product_name=f"{product.name} ({usd_amount} USD)",
             )
@@ -648,6 +750,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             if not result.reused_active_order:
                 await send_admin(admin_new_lead(order, source_label=order.get("source_key") or "unknown"))
             return
+
 
         waiting = container.repository.list_orders_by_user_and_statuses(
             tg_id=message.from_user.id,
@@ -791,6 +894,18 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
 
 async def notify_payment_confirmed(container: AppContainer, bot: Bot, order: dict[str, Any]) -> None:
     product = container.products[order["product_code"]]
+    guide_path = None
+    if order["product_code"] not in {OPENROUTER_CODE, NANO_BANANA_CODE}:
+        provider_guide = POST_PAYMENT_PROVIDER_GUIDE_BY_PROVIDER.get(product.provider)
+        if provider_guide and provider_guide.exists():
+            guide_path = provider_guide
+        elif product.provider in {"gpt", "claude", "cursor", "copilot"} and DEFAULT_POST_PAYMENT_GUIDE_PATH.exists():
+            guide_path = DEFAULT_POST_PAYMENT_GUIDE_PATH
+    if guide_path is not None:
+        await bot.send_photo(
+            chat_id=int(order["tg_id"]),
+            photo=FSInputFile(str(guide_path)),
+        )
     await bot.send_message(
         chat_id=int(order["tg_id"]),
         text=ask_service_link_text(product),

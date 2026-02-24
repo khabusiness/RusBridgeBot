@@ -11,7 +11,8 @@
     "service_link_prompt": "Пришлите ссылку оплаты сервиса (например: https://pay.openai.com/...).",
     "instruction_template": "Готово. Проверьте статус подписки в аккаунте.",
     "allowed_domains": [
-      "pay.openai.com"
+      "pay.openai.com",
+      "chatgpt.com"
     ]
   },
   {
@@ -26,7 +27,24 @@
     "service_link_prompt": "Пришлите ссылку оплаты сервиса (например: https://pay.openai.com/...).",
     "instruction_template": "Готово. Проверьте, что в аккаунте активен GPT Plus. Если есть вопросы нажмите «Вопрос оператору».",
     "allowed_domains": [
-      "pay.openai.com"
+      "pay.openai.com",
+      "chatgpt.com"
+    ]
+  },
+  {
+    "code": "gpt_plus_new_1m",
+    "name": "GPT Plus new user 1 month",
+    "price_rub": 400,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен доступ к аккаунту OpenAI - только для нового аккаунта в Open AI.",
+      "Может потребоваться VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты сервиса (например: https://pay.openai.com/...).",
+    "instruction_template": "Готово. Проверьте, что в аккаунте активен GPT Plus. Если есть вопросы нажмите «Вопрос оператору».",
+    "allowed_domains": [
+      "pay.openai.com",
+      "chatgpt.com"
     ]
   },
   {
@@ -41,7 +59,8 @@
     "service_link_prompt": "Пришлите ссылку оплаты сервиса (например: https://pay.openai.com/...).",
     "instruction_template": "Проверьте, что тариф GPT Pro активирован.",
     "allowed_domains": [
-      "pay.openai.com"
+      "pay.openai.com",
+      "chatgpt.com"
     ]
   },
   {
@@ -61,6 +80,27 @@
     ]
   },
   {
+    "code": "nano_banana",
+    "name": "Nano Banana",
+    "price_rub": 0,
+    "display_price": "по запросу",
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Nano Banana.",
+      "Сумму в USD вы задаете сами."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Nano Banana.",
+    "instruction_template": "Проверьте, что оплата в Nano Banana прошла на нужную сумму.",
+    "allowed_domains": [
+      "nanobanana.im",
+      "nanobanapro.com",
+      "nano-banana.ai",
+      "nano-banana.io",
+      "nanobanana.ai",
+      "nanobanana.app"
+    ]
+  },
+  {
     "code": "nano_banana_basic_1m",
     "name": "Nano Banana Basic 1 month",
     "price_rub": 1300,
@@ -74,7 +114,8 @@
     "allowed_domains": [
       "nanobanana.ai",
       "nanobanana.app"
-    ]
+    ],
+    "hidden": true
   },
   {
     "code": "nano_banana_pro_1m",
@@ -90,7 +131,8 @@
     "allowed_domains": [
       "nanobanana.ai",
       "nanobanana.app"
-    ]
+    ],
+    "hidden": true
   },
   {
     "code": "nano_banana_max_1m",
@@ -106,7 +148,8 @@
     "allowed_domains": [
       "nanobanana.ai",
       "nanobanana.app"
-    ]
+    ],
+    "hidden": true
   },
   {
     "code": "claude_pro_1m",
