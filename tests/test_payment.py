@@ -15,6 +15,8 @@ def _settings(test_mode: bool) -> Settings:
         database_path=":memory:",
         products_file="data/products.json",
         payment_test_mode=test_mode,
+        test_id=False,
+        daily_order_limit=5,
         mock_payment_success_url="https://khabusiness.github.io/rusbridge-site/success.html",
         mock_payment_fail_url="https://khabusiness.github.io/rusbridge-site/fail.html",
         robokassa_merchant_login="merchant",
@@ -31,6 +33,8 @@ def _settings(test_mode: bool) -> Settings:
         wait_service_link_timeout_hours=12,
         reminders_interval_hours=6,
         timeout_scan_minutes=10,
+        operator_cooldown_seconds=45,
+        debug_storage_enabled=False,
     )
 
 

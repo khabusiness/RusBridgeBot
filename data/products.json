@@ -152,6 +152,74 @@
     "hidden": true
   },
   {
+    "code": "mj_basic1m",
+    "name": "Midjourney Basic 1 month",
+    "provider": "midjourney",
+    "price_rub": 1000,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Midjourney.",
+      "При необходимости используйте VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Midjourney.",
+    "instruction_template": "Проверьте, что тариф Midjourney Basic активирован.",
+    "allowed_domains": [
+      "midjourney.com",
+      "billing.stripe.com"
+    ]
+  },
+  {
+    "code": "mj_standard_1m",
+    "name": "Midjourney Standard 1 month",
+    "provider": "midjourney",
+    "price_rub": 3000,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Midjourney.",
+      "При необходимости используйте VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Midjourney.",
+    "instruction_template": "Проверьте, что тариф Midjourney Standard активирован.",
+    "allowed_domains": [
+      "midjourney.com",
+      "billing.stripe.com"
+    ]
+  },
+  {
+    "code": "mj_pro_1m",
+    "name": "Midjourney Pro 1 month",
+    "provider": "midjourney",
+    "price_rub": 6200,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Midjourney.",
+      "При необходимости используйте VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Midjourney.",
+    "instruction_template": "Проверьте, что тариф Midjourney Pro активирован.",
+    "allowed_domains": [
+      "midjourney.com",
+      "billing.stripe.com"
+    ]
+  },
+  {
+    "code": "mj_mega_1m",
+    "name": "Midjourney Mega 1 month",
+    "provider": "midjourney",
+    "price_rub": 12000,
+    "duration_days": 30,
+    "requirements": [
+      "Нужен аккаунт Midjourney.",
+      "При необходимости используйте VPN."
+    ],
+    "service_link_prompt": "Пришлите ссылку оплаты Midjourney.",
+    "instruction_template": "Проверьте, что тариф Midjourney Mega активирован.",
+    "allowed_domains": [
+      "midjourney.com",
+      "billing.stripe.com"
+    ]
+  },
+  {
     "code": "claude_pro_1m",
     "name": "Claude Pro 1 month",
     "price_rub": 2000,

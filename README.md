@@ -11,7 +11,7 @@ UI messages are currently in Russian; this README is in English for maintenance.
 ## What Is Implemented
 
 1. Strict order state machine with explicit statuses.
-2. One active order per user and product (`tg_id + product_code` invariant).
+2. One active (non-terminal) order per user at a time.
 3. Two-step catalog UX: provider -> product.
 4. Fixed-price and variable-price products.
 5. Service payment-link validation by URL format and per-product domain allowlist.
@@ -20,6 +20,8 @@ UI messages are currently in Russian; this README is in English for maintenance.
 8. Admin proactive messaging to users via `/msg <tg_id|order_id> <text>`.
 9. Optional guide images before/after payment for selected providers.
 10. Renewal reminders based on `subscriptions` data.
+11. Anti-abuse controls: per-user open-order lock, daily order limit, operator request cooldown.
+12. Admin moderation controls: `/block`, `/unblock`, `/close`.
 
 ## Order Statuses
 
@@ -75,6 +77,34 @@ Admin inline actions:
 
 Admin text command:
 - `/msg <tg_id|order_id> <text>` - send a message to a specific user by Telegram ID or `RB-...` order ID.
+- `/block <tg_id|order_id> [reason]` - block user from bot actions.
+- `/unblock <tg_id|order_id>` - remove block.
+- `/close <order_id> <cancel|error> [reason]` - manually close an order.
+
+## Abuse and Security Protection
+
+- Open-order lock:
+  - a user cannot create a new order while any existing order is still in a non-terminal status
+  - this prevents creating many parallel unpaid/in-progress orders
+- Daily order limit:
+  - max N new orders per user per UTC day (`DAILY_ORDER_LIMIT`, default `5`)
+  - bypass switch for internal testing: `TEST_ID=true`
+- Operator request cooldown:
+  - `/operator`, `MOD: ...`, and operator-callback requests are rate-limited per user
+  - configured by `OPERATOR_COOLDOWN_SECONDS` (default `45`)
+- User blocking:
+  - blocked users are denied all bot actions in private flow and callbacks
+  - controlled by admin commands `/block` and `/unblock`
+- Manual admin closure:
+  - `/close <order_id> <cancel|error> [reason]` can force close stuck/problem orders
+  - closure is logged to `admin_actions`
+- Webhook hardening:
+  - Robokassa `SignatureValue` check
+  - strict `Shp_order_id` match with expected `order_id`
+  - strict `OutSum` match with expected order amount
+- Debug endpoint safety:
+  - `/debug/storage` is disabled by default
+  - enable explicitly with `DEBUG_STORAGE_ENABLED=true`
 
 ## Product Model and Catalog
 
@@ -115,6 +145,7 @@ Implemented:
 
 Notes:
 - only `ResultURL` webhook confirms payment in the order model
+- webhook request must pass `SignatureValue`, `Shp_order_id`, and `OutSum` checks
 - fail/expired browser redirects are not treated as paid events
 - expiration handled by internal timeout jobs (`WAIT_PAY_TIMEOUT_MINUTES`, `WAIT_SERVICE_LINK_TIMEOUT_HOURS`)
 
@@ -123,11 +154,12 @@ Notes:
 - `GET /health`
 - `POST /payment/robokassa/result`
 - `GET /payment/robokassa/fail`
-- `GET /debug/storage` (ops/debug helper)
+- `GET /debug/storage` (ops/debug helper, only when `DEBUG_STORAGE_ENABLED=true`)
 
 ## SQLite Tables
 
 - `users`
+- `blocked_users`
 - `orders`
 - `subscriptions`
 - `admin_actions`
@@ -151,8 +183,12 @@ Core variables:
 - `SUCCESS_URL`
 - `FAIL_URL`
 - `PAYMENT_TEST_MODE`
+- `TEST_ID`
+- `DAILY_ORDER_LIMIT`
 - `SQLITE_DB_PATH`
 - `PRODUCTS_FILE`
+- `OPERATOR_COOLDOWN_SECONDS`
+- `DEBUG_STORAGE_ENABLED`
 
 Go-live settings for real production payments:
 - `PAYMENT_TEST_MODE=false`

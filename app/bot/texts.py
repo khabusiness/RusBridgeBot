@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from app.products import Product
 
+HELP_LINKS_BY_PROVIDER: dict[str, str] = {
+    "claude": "https://rus-bridge.ru/help-claude.html",
+    "cursor": "https://rus-bridge.ru/help-ide.html",
+    "copilot": "https://rus-bridge.ru/help-ide.html",
+    "openrouter": "https://rus-bridge.ru/help-openrouter.html",
+}
+
 
 def format_product_requirements(product: Product) -> str:
     if not product.requirements:
@@ -48,11 +55,13 @@ def order_wait_pay_text(
 
 
 def ask_service_link_text(product: Product) -> str:
+    help_link = HELP_LINKS_BY_PROVIDER.get(product.provider)
+    help_text = f"\nПомощь: {help_link}" if help_link else ""
     return (
         "Оплата подтверждена ✅\n\n"
         f"{product.service_link_prompt}\n"
         "Формат: одна ссылка в одном сообщении.\n"
-        "Действие: отправьте ссылку.\n\n"
+        f"Действие: отправьте ссылку.{help_text}\n\n"
         "Если нужна помощь, напишите: МОД: ваш вопрос"
     )
 

@@ -15,6 +15,14 @@ CREATE TABLE IF NOT EXISTS users (
   source_key_last TEXT
 );
 
+CREATE TABLE IF NOT EXISTS blocked_users (
+  tg_id INTEGER PRIMARY KEY,
+  reason TEXT,
+  blocked_by INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   order_id TEXT NOT NULL UNIQUE,
@@ -91,4 +99,3 @@ def init_db(database_path: str) -> None:
     with sqlite3.connect(database_path) as conn:
         conn.executescript(SCHEMA)
         conn.commit()
-

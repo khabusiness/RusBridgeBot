@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import PlainTextResponse, RedirectResponse
 
@@ -9,6 +11,13 @@ from app.runtime import AppContainer
 
 def create_api(container: AppContainer, bot) -> FastAPI:
     app = FastAPI(title="RusBridgeBot API")
+
+    def _normalize_amount(value: str) -> str:
+        try:
+            normalized = Decimal(value).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            raise HTTPException(status_code=400, detail="invalid out_sum") from None
+        return format(normalized, "f")
 
     @app.get("/health")
     async def health() -> dict[str, str]:
@@ -25,6 +34,33 @@ def create_api(container: AppContainer, bot) -> FastAPI:
         inv_id_raw = data.get("InvId", "")
         if not inv_id_raw.isdigit():
             raise HTTPException(status_code=400, detail="invalid inv_id")
+        order = container.repository.get_order_by_payment_inv_id(int(inv_id_raw))
+        if order is not None:
+            shp_order_id = data.get("Shp_order_id", "")
+            if shp_order_id != order["order_id"]:
+                container.repository.log_event(
+                    "robokassa_shp_mismatch",
+                    {
+                        "inv_id": inv_id_raw,
+                        "shp_order_id": shp_order_id,
+                        "expected_order_id": order["order_id"],
+                    },
+                )
+                raise HTTPException(status_code=400, detail="invalid shp_order_id")
+
+            expected_out_sum = f"{int(order['price_rub']):.2f}"
+            got_out_sum = _normalize_amount(data.get("OutSum", ""))
+            if got_out_sum != expected_out_sum:
+                container.repository.log_event(
+                    "robokassa_out_sum_mismatch",
+                    {
+                        "inv_id": inv_id_raw,
+                        "order_id": order["order_id"],
+                        "got_out_sum": got_out_sum,
+                        "expected_out_sum": expected_out_sum,
+                    },
+                )
+                raise HTTPException(status_code=400, detail="invalid out_sum")
 
         result = container.order_flow.handle_successful_payment_webhook(
             inv_id=int(inv_id_raw),
@@ -69,24 +105,25 @@ def create_api(container: AppContainer, bot) -> FastAPI:
         )
         return RedirectResponse(url=redirect_to, status_code=302)
 
-    @app.get("/debug/storage")
-    async def debug_storage() -> dict:
-        import os
+    if container.settings.debug_storage_enabled:
+        @app.get("/debug/storage")
+        async def debug_storage() -> dict:
+            import os
 
-        storage_dir = "/data"
-        if not os.path.isdir(storage_dir):
-            return {"error": f"{storage_dir} is not mounted or does not exist", "files": []}
+            storage_dir = "/data"
+            if not os.path.isdir(storage_dir):
+                return {"error": f"{storage_dir} is not mounted or does not exist", "files": []}
 
-        files = []
-        total_size = 0
-        for file_name in sorted(os.listdir(storage_dir)):
-            path = os.path.join(storage_dir, file_name)
-            if not os.path.isfile(path):
-                continue
-            size = os.path.getsize(path)
-            total_size += size
-            files.append({"file": file_name, "size_bytes": size})
+            files = []
+            total_size = 0
+            for file_name in sorted(os.listdir(storage_dir)):
+                path = os.path.join(storage_dir, file_name)
+                if not os.path.isfile(path):
+                    continue
+                size = os.path.getsize(path)
+                total_size += size
+                files.append({"file": file_name, "size_bytes": size})
 
-        return {"files": files, "total_size_bytes": total_size}
+            return {"files": files, "total_size_bytes": total_size}
 
     return app

@@ -58,6 +58,8 @@ class Settings:
     database_path: str
     products_file: str
     payment_test_mode: bool
+    test_id: bool
+    daily_order_limit: int
     mock_payment_success_url: str
     mock_payment_fail_url: str
     robokassa_merchant_login: str
@@ -74,6 +76,8 @@ class Settings:
     wait_service_link_timeout_hours: int
     reminders_interval_hours: int
     timeout_scan_minutes: int
+    operator_cooldown_seconds: int
+    debug_storage_enabled: bool
 
 
 def load_settings(env_file: str = ".env") -> Settings:
@@ -101,6 +105,8 @@ def load_settings(env_file: str = ".env") -> Settings:
         database_path=_read_first(env, "SQLITE_DB_PATH", default="rusbridge.db") or "rusbridge.db",
         products_file=_read_first(env, "PRODUCTS_FILE", default="data/products.json") or "data/products.json",
         payment_test_mode=_parse_bool(_read_first(env, "PAYMENT_TEST_MODE", default="true"), True),
+        test_id=_parse_bool(_read_first(env, "TEST_ID", default="false"), False),
+        daily_order_limit=_parse_int(_read_first(env, "DAILY_ORDER_LIMIT", default="5"), 5),
         mock_payment_success_url=_read_first(
             env,
             "MOCK_PAYMENT_SUCCESS_URL",
@@ -140,6 +146,14 @@ def load_settings(env_file: str = ".env") -> Settings:
         timeout_scan_minutes=_parse_int(
             _read_first(env, "TIMEOUT_SCAN_MINUTES", default="10"),
             10,
+        ),
+        operator_cooldown_seconds=_parse_int(
+            _read_first(env, "OPERATOR_COOLDOWN_SECONDS", default="45"),
+            45,
+        ),
+        debug_storage_enabled=_parse_bool(
+            _read_first(env, "DEBUG_STORAGE_ENABLED", default="false"),
+            False,
         ),
     )
     return settings

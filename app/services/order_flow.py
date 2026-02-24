@@ -7,7 +7,12 @@ from typing import Any
 from app.config import Settings
 from app.enums import OrderStatus
 from app.products import Product
-from app.repository import ActiveOrderExistsError, Repository, utcnow
+from app.repository import (
+    ActiveOrderExistsError,
+    Repository,
+    UserHasOpenOrderError,
+    utcnow,
+)
 from app.services.payment import PaymentLink, RobokassaService
 
 
@@ -23,6 +28,19 @@ class PaymentWebhookResult:
     order: dict[str, Any] | None
     updated: bool
     reason: str
+
+
+@dataclass(slots=True)
+class DailyOrderLimitExceededError(Exception):
+    tg_id: int
+    limit: int
+    created_today: int
+
+    def __str__(self) -> str:
+        return (
+            f"Daily order limit exceeded for tg_id={self.tg_id}: "
+            f"{self.created_today}/{self.limit}"
+        )
 
 
 class OrderFlowService:
@@ -67,6 +85,39 @@ class OrderFlowService:
         product = self.products[product_code]
         target_price_rub = custom_price_rub if custom_price_rub is not None else product.price_rub
         target_product_name = custom_product_name or product.name
+        active_any = self.repository.find_active_order_any(tg_id=tg_id)
+        if active_any is not None:
+            if active_any["product_code"] != product_code:
+                raise UserHasOpenOrderError(
+                    tg_id=tg_id,
+                    existing_order_id=active_any["order_id"],
+                    existing_product_code=active_any["product_code"],
+                    existing_status=active_any["status"],
+                )
+            if active_any["status"] == OrderStatus.NEW.value:
+                active_any = self.repository.transition_order(
+                    order_id=active_any["order_id"],
+                    target_status=OrderStatus.WAIT_PAY.value,
+                )
+            payment = self._build_payment_link(order=active_any)
+            self.repository.update_payment_fields(active_any["order_id"], out_sum=payment.out_sum)
+            return CreateOrderResult(order=active_any, payment=payment, reused_active_order=True)
+
+        if not self.settings.test_id and self.settings.daily_order_limit > 0:
+            now_dt = utcnow()
+            day_start = now_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+            created_today = self.repository.count_orders_created_between(
+                tg_id=tg_id,
+                start_iso=day_start.isoformat(),
+                end_iso=day_end.isoformat(),
+            )
+            if created_today >= self.settings.daily_order_limit:
+                raise DailyOrderLimitExceededError(
+                    tg_id=tg_id,
+                    limit=self.settings.daily_order_limit,
+                    created_today=created_today,
+                )
         try:
             order = self.repository.create_order(
                 tg_id=tg_id,

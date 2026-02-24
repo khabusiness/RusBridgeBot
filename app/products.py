@@ -5,11 +5,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-PROVIDER_ORDER = ("gpt", "openrouter", "nano", "claude", "cursor", "copilot", "other")
+PROVIDER_ORDER = ("gpt", "openrouter", "nano", "midjourney", "claude", "cursor", "copilot", "other")
 PROVIDER_TITLES: dict[str, str] = {
     "gpt": "GPT",
     "openrouter": "OpenRouter",
     "nano": "Nano Banana",
+    "midjourney": "Midjourney",
     "claude": "Claude",
     "cursor": "Cursor",
     "copilot": "Copilot",
@@ -23,6 +24,8 @@ def infer_provider(product_code: str) -> str:
     for prefix, provider in (
         ("gpt_", "gpt"),
         ("nano_", "nano"),
+        ("mj_", "midjourney"),
+        ("midjourney_", "midjourney"),
         ("claude_", "claude"),
         ("cursor_", "cursor"),
         ("copilot_", "copilot"),

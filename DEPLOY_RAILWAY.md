@@ -21,8 +21,12 @@ Set these variables in Railway:
 11. `ROBOCASSA_HASH_ALGO=md5`
 12. `ROBOCASSA_IS_TEST=false`
 13. `PAYMENT_TEST_MODE=true` for first end-to-end check, then `false`
-14. `PRODUCTS_FILE=data/products.json`
-15. `SQLITE_DB_PATH=/data/rusbridge.db`
+14. `TEST_ID=false`
+15. `DAILY_ORDER_LIMIT=5`
+16. `OPERATOR_COOLDOWN_SECONDS=45`
+17. `DEBUG_STORAGE_ENABLED=false`
+18. `PRODUCTS_FILE=data/products.json`
+19. `SQLITE_DB_PATH=/data/rusbridge.db`
 
 ## 3. SQLite volume
 1. Add persistent volume.
@@ -46,4 +50,3 @@ Set these variables in Railway:
 2. Keep `ROBOCASSA_IS_TEST=false`.
 3. Run one real payment.
 4. Verify order transitions to `WAIT_SERVICE_LINK` via webhook.
-

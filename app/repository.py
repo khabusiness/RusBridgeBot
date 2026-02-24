@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from app.enums import OrderStatus
+from app.enums import ACTIVE_ORDER_STATUSES, OrderStatus
 from app.state_machine import TransitionError, ensure_transition
 
 
@@ -43,6 +43,20 @@ class ActiveOrderExistsError(Exception):
                 f"{self.existing_order_id}"
             )
         return f"Active order exists for tg_id={self.tg_id} product={self.product_code}"
+
+
+@dataclass(slots=True)
+class UserHasOpenOrderError(Exception):
+    tg_id: int
+    existing_order_id: str
+    existing_product_code: str
+    existing_status: str
+
+    def __str__(self) -> str:
+        return (
+            f"User tg_id={self.tg_id} has open order {self.existing_order_id} "
+            f"({self.existing_product_code}, {self.existing_status})"
+        )
 
 
 class Repository:
@@ -88,19 +102,48 @@ class Repository:
             ).fetchone()
             return _row_to_dict(row)
 
-    def find_active_order(self, tg_id: int, product_code: str) -> dict[str, Any] | None:
+    def find_active_order_any(self, tg_id: int) -> dict[str, Any] | None:
+        placeholders = ",".join("?" for _ in ACTIVE_ORDER_STATUSES)
+        statuses = tuple(sorted(ACTIVE_ORDER_STATUSES))
         with self._connect() as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT * FROM orders
-                WHERE tg_id = ? AND product_code = ?
-                  AND status IN ('NEW','WAIT_PAY','PAID','WAIT_SERVICE_LINK','READY_FOR_OPERATOR','IN_PROGRESS','DONE','WAIT_CLIENT_CONFIRM')
+                WHERE tg_id = ? AND status IN ({placeholders})
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
-                (tg_id, product_code),
+                (tg_id, *statuses),
             ).fetchone()
             return _row_to_dict(row)
+
+    def find_active_order(self, tg_id: int, product_code: str) -> dict[str, Any] | None:
+        placeholders = ",".join("?" for _ in ACTIVE_ORDER_STATUSES)
+        statuses = tuple(sorted(ACTIVE_ORDER_STATUSES))
+        with self._connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT * FROM orders
+                WHERE tg_id = ? AND product_code = ?
+                  AND status IN ({placeholders})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (tg_id, product_code, *statuses),
+            ).fetchone()
+            return _row_to_dict(row)
+
+    def count_orders_created_between(self, tg_id: int, start_iso: str, end_iso: str) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(1) AS count_value
+                FROM orders
+                WHERE tg_id = ? AND created_at >= ? AND created_at < ?
+                """,
+                (tg_id, start_iso, end_iso),
+            ).fetchone()
+            return int(row["count_value"]) if row is not None else 0
 
     def list_orders_by_user_and_statuses(self, tg_id: int, statuses: list[str]) -> list[dict[str, Any]]:
         if not statuses:
@@ -145,7 +188,33 @@ class Repository:
             json.dumps({}),
         )
 
+        statuses = tuple(sorted(ACTIVE_ORDER_STATUSES))
+        placeholders = ",".join("?" for _ in statuses)
         with self._lock, self._connect() as conn:
+            existing_row = conn.execute(
+                f"""
+                SELECT * FROM orders
+                WHERE tg_id = ? AND status IN ({placeholders})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (tg_id, *statuses),
+            ).fetchone()
+            if existing_row is not None:
+                existing = _row_to_dict(existing_row)
+                assert existing is not None
+                if existing["product_code"] == product_code:
+                    raise ActiveOrderExistsError(
+                        tg_id=tg_id,
+                        product_code=product_code,
+                        existing_order_id=existing["order_id"],
+                    )
+                raise UserHasOpenOrderError(
+                    tg_id=tg_id,
+                    existing_order_id=existing["order_id"],
+                    existing_product_code=existing["product_code"],
+                    existing_status=existing["status"],
+                )
             try:
                 cursor = conn.execute(
                     """
@@ -173,6 +242,41 @@ class Repository:
         created = self.get_order(order_id)
         assert created is not None
         return created
+
+    def get_user_block(self, tg_id: int) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM blocked_users WHERE tg_id = ? LIMIT 1",
+                (tg_id,),
+            ).fetchone()
+            return _row_to_dict(row)
+
+    def is_user_blocked(self, tg_id: int) -> bool:
+        return self.get_user_block(tg_id) is not None
+
+    def block_user(self, tg_id: int, blocked_by: int, reason: str | None = None) -> None:
+        now = iso_now()
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO blocked_users(tg_id, reason, blocked_by, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(tg_id) DO UPDATE SET
+                  reason=excluded.reason,
+                  blocked_by=excluded.blocked_by,
+                  updated_at=excluded.updated_at
+                """,
+                (tg_id, reason, blocked_by, now, now),
+            )
+            conn.commit()
+
+    def unblock_user(self, tg_id: int) -> None:
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                "DELETE FROM blocked_users WHERE tg_id = ?",
+                (tg_id,),
+            )
+            conn.commit()
 
     def update_payment_fields(
         self,

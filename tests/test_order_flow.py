@@ -8,8 +8,8 @@ import pytest
 from app.db import init_db
 from app.enums import OrderStatus
 from app.products import load_products
-from app.repository import ActiveOrderExistsError, Repository
-from app.services.order_flow import OrderFlowService
+from app.repository import ActiveOrderExistsError, Repository, UserHasOpenOrderError
+from app.services.order_flow import DailyOrderLimitExceededError, OrderFlowService
 from app.services.payment import RobokassaService
 
 
@@ -136,3 +136,105 @@ def test_create_order_with_custom_price(settings, tmp_path: Path) -> None:
     assert created.order["price_rub"] == 2600
     assert created.order["product_name"] == "OpenRouter (25 USD)"
     assert created.payment.out_sum == "2600.00"
+
+
+def test_one_active_order_per_user_across_products(settings, tmp_path: Path) -> None:
+    _write_products(Path(settings.products_file))
+    init_db(settings.database_path)
+    repo = Repository(settings.database_path)
+    products = load_products(settings.products_file)
+    payment = RobokassaService(settings)
+    flow = OrderFlowService(repo, products, payment, settings)
+
+    first = flow.create_or_resume_order(
+        tg_id=13,
+        username="client",
+        source_key="gpt_plus_1m",
+        product_code="gpt_plus_1m",
+    )
+    assert first.order["status"] == OrderStatus.WAIT_PAY.value
+
+    with pytest.raises(UserHasOpenOrderError):
+        flow.create_or_resume_order(
+            tg_id=13,
+            username="client",
+            source_key="openrouter",
+            product_code="openrouter",
+        )
+
+
+def test_daily_limit_blocks_new_orders_when_test_id_disabled(settings, tmp_path: Path) -> None:
+    settings.daily_order_limit = 2
+    settings.test_id = False
+    _write_products(Path(settings.products_file))
+    init_db(settings.database_path)
+    repo = Repository(settings.database_path)
+    products = load_products(settings.products_file)
+    payment = RobokassaService(settings)
+    flow = OrderFlowService(repo, products, payment, settings)
+
+    first = flow.create_or_resume_order(
+        tg_id=14,
+        username="client",
+        source_key="gpt_plus_1m",
+        product_code="gpt_plus_1m",
+    )
+    repo.transition_order(first.order["order_id"], OrderStatus.CANCELLED.value)
+
+    second = flow.create_or_resume_order(
+        tg_id=14,
+        username="client",
+        source_key="gpt_plus_1m",
+        product_code="gpt_plus_1m",
+    )
+    repo.transition_order(second.order["order_id"], OrderStatus.CANCELLED.value)
+
+    with pytest.raises(DailyOrderLimitExceededError):
+        flow.create_or_resume_order(
+            tg_id=14,
+            username="client",
+            source_key="gpt_plus_1m",
+            product_code="gpt_plus_1m",
+        )
+
+
+def test_daily_limit_is_ignored_when_test_id_enabled(settings, tmp_path: Path) -> None:
+    settings.daily_order_limit = 1
+    settings.test_id = True
+    _write_products(Path(settings.products_file))
+    init_db(settings.database_path)
+    repo = Repository(settings.database_path)
+    products = load_products(settings.products_file)
+    payment = RobokassaService(settings)
+    flow = OrderFlowService(repo, products, payment, settings)
+
+    first = flow.create_or_resume_order(
+        tg_id=15,
+        username="client",
+        source_key="gpt_plus_1m",
+        product_code="gpt_plus_1m",
+    )
+    repo.transition_order(first.order["order_id"], OrderStatus.CANCELLED.value)
+
+    second = flow.create_or_resume_order(
+        tg_id=15,
+        username="client",
+        source_key="gpt_plus_1m",
+        product_code="gpt_plus_1m",
+    )
+    assert second.order["order_id"] != first.order["order_id"]
+
+
+def test_block_and_unblock_user(settings, tmp_path: Path) -> None:
+    _write_products(Path(settings.products_file))
+    init_db(settings.database_path)
+    repo = Repository(settings.database_path)
+
+    assert not repo.is_user_blocked(16)
+    repo.block_user(tg_id=16, blocked_by=9001, reason="spam")
+    block = repo.get_user_block(16)
+    assert block is not None
+    assert block["reason"] == "spam"
+    assert repo.is_user_blocked(16)
+    repo.unblock_user(16)
+    assert not repo.is_user_blocked(16)
