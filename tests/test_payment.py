@@ -6,7 +6,7 @@ from app.config import Settings
 from app.services.payment import RobokassaService
 
 
-def _settings(test_mode: bool) -> Settings:
+def _settings(test_mode: bool, *, payment_mode: str = "robokassa") -> Settings:
     return Settings(
         bot_token="token",
         bot_username="RusBridgeBot",
@@ -14,6 +14,7 @@ def _settings(test_mode: bool) -> Settings:
         owner_chat_id=None,
         database_path=":memory:",
         products_file="data/products.json",
+        payment_mode=payment_mode,
         payment_test_mode=test_mode,
         test_id=False,
         daily_order_limit=5,
@@ -35,6 +36,10 @@ def _settings(test_mode: bool) -> Settings:
         timeout_scan_minutes=10,
         operator_cooldown_seconds=45,
         debug_storage_enabled=False,
+        manual_pay_phone="+79990000000",
+        manual_pay_banks="Сбербанк/Т-Банк",
+        manual_pay_receiver="Имя Отчество",
+        manual_pay_card="0000 0000 0000 0000",
     )
 
 
@@ -74,3 +79,16 @@ def test_verify_result_signature_false_for_bad_signature() -> None:
         "SignatureValue": "deadbeef",
     }
     assert not service.verify_result_signature(payload)
+
+
+def test_create_payment_link_manual_mode() -> None:
+    service = RobokassaService(_settings(test_mode=False, payment_mode="manual"))
+    link = service.create_payment_link(
+        order_id="RB-2",
+        inv_id=11,
+        amount_rub=1500,
+        description="manual-test",
+    )
+    assert link.provider_mode == "manual"
+    assert link.pay_url == ""
+    assert link.out_sum == "1500.00"

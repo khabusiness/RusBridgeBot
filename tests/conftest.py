@@ -17,6 +17,7 @@ def settings(tmp_path: Path) -> Settings:
         owner_chat_id=1,
         database_path=str(db_path),
         products_file=str(tmp_path / "products.json"),
+        payment_mode="robokassa",
         payment_test_mode=True,
         test_id=False,
         daily_order_limit=5,
@@ -38,4 +39,8 @@ def settings(tmp_path: Path) -> Settings:
         timeout_scan_minutes=10,
         operator_cooldown_seconds=45,
         debug_storage_enabled=False,
+        manual_pay_phone="+79990000000",
+        manual_pay_banks="Сбербанк/Т-Банк",
+        manual_pay_receiver="Имя Отчество",
+        manual_pay_card="0000 0000 0000 0000",
     )
