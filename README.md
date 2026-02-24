@@ -1,7 +1,7 @@
 # RusBridgeBot (Python)
 
 Telegram bot for selling subscription setup services with:
-- Robokassa payment links and webhook confirmation
+- manual payment by screenshot (primary mode) and optional Robokassa mode
 - operator workflow in a Telegram admin chat
 - SQLite persistence
 - FastAPI web endpoints for payment callbacks
@@ -44,8 +44,10 @@ UI messages are currently in Russian; this README is in English for maintenance.
 
 1. User starts with `/start` (or deep link like `/start gpt_plus_1m`).
 2. User picks provider and product (or enters custom USD amount for variable-price products).
-3. Bot creates/resumes order and sends payment link.
-4. Payment is confirmed by webhook (`/payment/robokassa/result`) or by test action when test mode is enabled.
+3. Bot creates/resumes order and shows payment action.
+4. Payment is confirmed either:
+   - manually by operator from payment screenshot, or
+   - by webhook (`/payment/robokassa/result`) when `PAYMENT_MODE=robokassa`.
 5. Bot asks for the service payment link.
 6. Link is validated and sent to admin workflow.
 7. Operator processes order (`CLAIM -> IN_PROGRESS -> DONE`).
@@ -149,6 +151,14 @@ Notes:
 - fail/expired browser redirects are not treated as paid events
 - expiration handled by internal timeout jobs (`WAIT_PAY_TIMEOUT_MINUTES`, `WAIT_SERVICE_LINK_TIMEOUT_HOURS`)
 
+## Manual Payment Mode
+
+- Set `PAYMENT_MODE=manual`.
+- Bot shows payment details after `Оплатить` button press.
+- User sends payment screenshot in chat.
+- Admin confirms payment via `PAYMENT DONE` callback in admin chat.
+- After that, bot sends standard `Оплата подтверждена` and asks for service link.
+
 ## HTTP Endpoints
 
 - `GET /health`
@@ -183,6 +193,11 @@ Core variables:
 - `SUCCESS_URL`
 - `FAIL_URL`
 - `PAYMENT_TEST_MODE`
+- `PAYMENT_MODE`
+- `MANUAL_PAY_PHONE`
+- `MANUAL_PAY_BANKS`
+- `MANUAL_PAY_RECEIVER`
+- `MANUAL_PAY_CARD`
 - `TEST_ID`
 - `DAILY_ORDER_LIMIT`
 - `SQLITE_DB_PATH`

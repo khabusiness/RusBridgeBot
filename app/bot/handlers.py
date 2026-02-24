@@ -10,9 +10,12 @@ from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, FSInputFile, LinkPreviewOptions, Message
 
 from app.bot.keyboards import (
+    admin_payment_proof_keyboard,
     admin_order_keyboard,
     client_confirm_keyboard,
     confirm_product_keyboard,
+    manual_payment_keyboard,
+    manual_payment_retry_keyboard,
     payment_keyboard,
     payment_retry_keyboard,
     payment_test_confirm_keyboard,
@@ -27,6 +30,7 @@ from app.bot.texts import (
     admin_paid,
     ask_service_link_text,
     invalid_service_link_text,
+    manual_payment_details_text,
     order_wait_pay_text,
     product_confirmation_text,
 )
@@ -208,23 +212,59 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         except ValueError:
             return None
 
-    async def send_wait_pay_resume(message: Message, order: dict[str, Any], *, reason: str | None = None) -> None:
+    def is_manual_payment_mode() -> bool:
+        return container.settings.payment_mode == "manual"
+
+    def payment_primary_keyboard(order: dict[str, Any], pay_url: str) -> Any:
+        if is_manual_payment_mode():
+            return manual_payment_keyboard(order["order_id"])
+        return payment_keyboard(pay_url)
+
+    def payment_retry_controls(order: dict[str, Any], pay_url: str) -> Any:
+        if is_manual_payment_mode():
+            return manual_payment_retry_keyboard(order["order_id"])
+        return payment_retry_keyboard(pay_url, order["order_id"])
+
+    async def send_wait_pay_messages(message: Message, order: dict[str, Any], payment_url: str) -> None:
         product = container.products[order["product_code"]]
-        payment = container.order_flow.get_payment_link_for_order(order)
-        if reason:
-            await message.answer(reason)
         await message.answer(
             order_wait_pay_text(
                 product,
                 order["order_id"],
+                container.settings.payment_mode,
                 container.settings.payment_test_mode,
                 price_rub=int(order["price_rub"]),
             ),
-            reply_markup=payment_keyboard(payment.pay_url),
+            reply_markup=payment_primary_keyboard(order, payment_url),
         )
         await message.answer(
+            f"Заказ {order['order_id']} отслеживается автоматически.\n"
+            "Если нужно, проверьте вручную: /status " + order["order_id"]
+        )
+        await message.answer(
+            "Если хотите отменить до подтверждения оплаты: /cancel " + order["order_id"]
+        )
+        if is_manual_payment_mode():
+            await message.answer("После оплаты пришлите скриншот в этот чат.")
+            return
+        if container.settings.payment_test_mode:
+            await message.answer(
+                "Тестовый шаг: подтвердите успешную оплату.",
+                reply_markup=payment_test_confirm_keyboard(order["order_id"]),
+            )
+            await message.answer(
+                "Тестовый шаг: сценарий неуспешной оплаты.",
+                reply_markup=payment_test_fail_keyboard(order["order_id"]),
+            )
+
+    async def send_wait_pay_resume(message: Message, order: dict[str, Any], *, reason: str | None = None) -> None:
+        payment = container.order_flow.get_payment_link_for_order(order)
+        if reason:
+            await message.answer(reason)
+        await send_wait_pay_messages(message, order, payment.pay_url)
+        await message.answer(
             "Если оплата не прошла, можно повторить или отменить заказ:",
-            reply_markup=payment_retry_keyboard(payment.pay_url, order["order_id"]),
+            reply_markup=payment_retry_controls(order, payment.pay_url),
         )
 
     @router.message(CommandStart())
@@ -582,6 +622,38 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         )
         await callback.answer()
 
+    @router.callback_query(F.data.startswith("pay_details:"))
+    async def show_manual_payment_details(callback: CallbackQuery) -> None:
+        if not await ensure_not_blocked_callback(callback):
+            return
+        if not is_manual_payment_mode():
+            await callback.answer("Недоступно в этом режиме оплаты", show_alert=True)
+            return
+        if callback.message is None:
+            await callback.answer("Сообщение недоступно", show_alert=True)
+            return
+        order_id = callback.data.split(":", 1)[1]
+        order = container.repository.get_order(order_id)
+        if order is None or int(order["tg_id"]) != callback.from_user.id:
+            await callback.answer("Заказ не найден", show_alert=True)
+            return
+        if order["status"] != OrderStatus.WAIT_PAY.value:
+            await callback.message.answer(
+                f"Этот заказ уже не ждёт оплату. Текущий статус: {order['status']}"
+            )
+            await callback.answer()
+            return
+        await callback.message.answer(
+            manual_payment_details_text(
+                order_id=order["order_id"],
+                phone=container.settings.manual_pay_phone,
+                banks=container.settings.manual_pay_banks,
+                receiver=container.settings.manual_pay_receiver,
+                card=container.settings.manual_pay_card,
+            )
+        )
+        await callback.answer()
+
     @router.callback_query(F.data.startswith("confirm:"))
     async def confirm_product(callback: CallbackQuery) -> None:
         if not await ensure_not_blocked_callback(callback):
@@ -596,9 +668,9 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             if callback.message is None:
                 await callback.answer("Сообщение недоступно", show_alert=True)
                 return
-                await ask_variable_amount(callback.message, product.code, tg_id=callback.from_user.id)
-                await callback.answer()
-                return
+            await ask_variable_amount(callback.message, product.code, tg_id=callback.from_user.id)
+            await callback.answer()
+            return
         if product.provider == "claude":
             passed_code = claude_precheck_passed.get(callback.from_user.id)
             if passed_code != product.code:
@@ -645,31 +717,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             await callback.answer()
             return
 
-        await callback.message.answer(
-            order_wait_pay_text(
-                product,
-                order["order_id"],
-                container.settings.payment_test_mode,
-                price_rub=int(order["price_rub"]),
-            ),
-            reply_markup=payment_keyboard(result.payment.pay_url),
-        )
-        await callback.message.answer(
-            f"Заказ {order['order_id']} отслеживается автоматически.\n"
-            "Если нужно, проверьте вручную: /status " + order["order_id"]
-        )
-        await callback.message.answer(
-            "Если хотите отменить до подтверждения оплаты: /cancel " + order["order_id"]
-        )
-        if container.settings.payment_test_mode:
-            await callback.message.answer(
-                "Тестовый шаг: подтвердите успешную оплату.",
-                reply_markup=payment_test_confirm_keyboard(order["order_id"]),
-            )
-            await callback.message.answer(
-                "Тестовый шаг: сценарий неуспешной оплаты.",
-                reply_markup=payment_test_fail_keyboard(order["order_id"]),
-            )
+        await send_wait_pay_messages(callback.message, order, result.payment.pay_url)
 
         if not result.reused_active_order:
             await send_admin(admin_new_lead(order, source_label=order.get("source_key") or "unknown"))
@@ -750,9 +798,14 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             return
 
         if order["status"] == OrderStatus.WAIT_PAY.value:
-            await callback.message.answer(
-                "Платёж пока не подтверждён. Обновление приходит автоматически по webhook."
-            )
+            if is_manual_payment_mode():
+                await callback.message.answer(
+                    "Платёж пока не подтверждён. Пришлите скриншот оплаты в этот чат."
+                )
+            else:
+                await callback.message.answer(
+                    "Платёж пока не подтверждён. Обновление приходит автоматически по webhook."
+                )
         elif order["status"] in {
             OrderStatus.PAID.value,
             OrderStatus.WAIT_SERVICE_LINK.value,
@@ -769,6 +822,9 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data.startswith("test_paid:"))
     async def test_paid(callback: CallbackQuery) -> None:
         if not await ensure_not_blocked_callback(callback):
+            return
+        if is_manual_payment_mode():
+            await callback.answer("Недоступно в ручном режиме оплаты", show_alert=True)
             return
         if not container.settings.payment_test_mode:
             await callback.answer("Кнопка доступна только в test mode", show_alert=True)
@@ -795,6 +851,9 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data.startswith("test_fail:"))
     async def test_fail(callback: CallbackQuery) -> None:
         if not await ensure_not_blocked_callback(callback):
+            return
+        if is_manual_payment_mode():
+            await callback.answer("Недоступно в ручном режиме оплаты", show_alert=True)
             return
         if not container.settings.payment_test_mode:
             await callback.answer("Кнопка доступна только в test mode", show_alert=True)
@@ -923,31 +982,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             )
             await callback.answer("Достигнут дневной лимит", show_alert=True)
             return
-        await callback.message.answer(
-            order_wait_pay_text(
-                product,
-                result.order["order_id"],
-                container.settings.payment_test_mode,
-                price_rub=int(result.order["price_rub"]),
-            ),
-            reply_markup=payment_keyboard(result.payment.pay_url),
-        )
-        await callback.message.answer(
-            f"Заказ {result.order['order_id']} отслеживается автоматически.\n"
-            "Если нужно, проверьте вручную: /status " + result.order["order_id"]
-        )
-        await callback.message.answer(
-            "Если хотите отменить до подтверждения оплаты: /cancel " + result.order["order_id"]
-        )
-        if container.settings.payment_test_mode:
-            await callback.message.answer(
-                "Тестовый шаг: подтвердите успешную оплату.",
-                reply_markup=payment_test_confirm_keyboard(result.order["order_id"]),
-            )
-            await callback.message.answer(
-                "Тестовый шаг: сценарий неуспешной оплаты.",
-                reply_markup=payment_test_fail_keyboard(result.order["order_id"]),
-            )
+        await send_wait_pay_messages(callback.message, result.order, result.payment.pay_url)
         if not result.reused_active_order:
             await send_admin(admin_new_lead(result.order, source_label=f"renew_{product_code}"))
         await callback.answer()
@@ -956,14 +991,46 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     async def handle_private_text(message: Message) -> None:
         if not await ensure_not_blocked_message(message):
             return
-        if not message.text:
+        has_text = bool(message.text and message.text.strip())
+        has_media = bool(message.photo or message.document)
+        if not has_text and not has_media:
             return
-        text = message.text.strip()
+        text = message.text.strip() if has_text else ""
         container.repository.upsert_user(
             tg_id=message.from_user.id,
             username=message.from_user.username,
             source_key=None,
         )
+
+        wait_pay_orders = container.repository.list_orders_by_user_and_statuses(
+            tg_id=message.from_user.id,
+            statuses=[OrderStatus.WAIT_PAY.value],
+        )
+        if is_manual_payment_mode() and has_media:
+            if not wait_pay_orders:
+                await message.answer("Активного заказа на оплату не найдено. Используйте /start.")
+                return
+            target_order = wait_pay_orders[0]
+            try:
+                await message.copy_to(chat_id=container.settings.admin_chat_id)
+            except Exception:
+                pass
+            await send_admin(
+                "PAYMENT SCREENSHOT RECEIVED\n"
+                f"Order ID: {target_order['order_id']}\n"
+                f"Пользователь: @{message.from_user.username or 'без_username'} (id: {message.from_user.id})\n"
+                f"Сумма: {target_order['price_rub']} ₽",
+                reply_markup=admin_payment_proof_keyboard(target_order["order_id"]),
+            )
+            await message.answer(
+                "Скриншот получен ✅\n"
+                "Ожидайте подтверждения оплаты оператором."
+            )
+            return
+        if not has_text:
+            if is_manual_payment_mode() and wait_pay_orders:
+                await message.answer("Ожидаем скриншот оплаты по вашему заказу.")
+            return
 
         lower_text = text.lower()
         if lower_text.startswith("мод:") or lower_text.startswith("mod:"):
@@ -1050,31 +1117,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
                 )
                 return
 
-            await message.answer(
-                order_wait_pay_text(
-                    product,
-                    order["order_id"],
-                    container.settings.payment_test_mode,
-                    price_rub=int(order["price_rub"]),
-                ),
-                reply_markup=payment_keyboard(result.payment.pay_url),
-            )
-            await message.answer(
-                f"Заказ {order['order_id']} отслеживается автоматически.\n"
-                "Если нужно, проверьте вручную: /status " + order["order_id"]
-            )
-            await message.answer(
-                "Если хотите отменить до подтверждения оплаты: /cancel " + order["order_id"]
-            )
-            if container.settings.payment_test_mode:
-                await message.answer(
-                    "Тестовый шаг: подтвердите успешную оплату.",
-                    reply_markup=payment_test_confirm_keyboard(order["order_id"]),
-                )
-                await message.answer(
-                    "Тестовый шаг: сценарий неуспешной оплаты.",
-                    reply_markup=payment_test_fail_keyboard(order["order_id"]),
-                )
+            await send_wait_pay_messages(message, order, result.payment.pay_url)
             if not result.reused_active_order:
                 await send_admin(admin_new_lead(order, source_label=order.get("source_key") or "unknown"))
             return
@@ -1106,6 +1149,13 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             await message.answer(
                 product_confirmation_text(product),
                 reply_markup=confirm_product_keyboard(product.code),
+            )
+            return
+
+        if is_manual_payment_mode() and wait_pay_orders:
+            await message.answer(
+                "Платёж пока не подтверждён.\n"
+                "Нажмите «Оплатить», затем пришлите скриншот оплаты в этот чат."
             )
             return
 
@@ -1178,7 +1228,32 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         admin_username = callback.from_user.username
 
         try:
-            if action == "admin_claim":
+            if action == "admin_pay_done":
+                result = container.order_flow.confirm_payment_manually(order_id=order_id)
+                if not result.updated or result.order is None:
+                    await callback.answer(f"Оплату нельзя подтвердить: {result.reason}", show_alert=True)
+                    return
+                updated = result.order
+                container.repository.log_admin_action(order_id, admin_id, admin_username, "PAYMENT_DONE")
+                await callback.message.answer(f"PAYMENT DONE: {updated['order_id']}")
+                await notify_payment_confirmed(container, bot, updated)
+
+            elif action == "admin_pay_retry":
+                if order["status"] != OrderStatus.WAIT_PAY.value:
+                    await callback.answer("Заказ уже не в статусе WAIT_PAY", show_alert=True)
+                    return
+                container.repository.log_admin_action(order_id, admin_id, admin_username, "PAYMENT_RETRY")
+                await bot.send_message(
+                    chat_id=int(order["tg_id"]),
+                    text=(
+                        "Не удалось подтвердить оплату по скриншоту.\n"
+                        "Проверьте перевод и пришлите новый скриншот."
+                    ),
+                    reply_markup=manual_payment_keyboard(order["order_id"]) if is_manual_payment_mode() else None,
+                )
+                await callback.message.answer(f"PAYMENT RETRY REQUESTED: {order['order_id']}")
+
+            elif action == "admin_claim":
                 updated = container.repository.claim_order(order_id, admin_id, admin_username)
                 container.repository.log_admin_action(order_id, admin_id, admin_username, "CLAIM")
                 await callback.message.answer(

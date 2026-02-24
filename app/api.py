@@ -23,87 +23,88 @@ def create_api(container: AppContainer, bot) -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
-    @app.post("/payment/robokassa/result", response_class=PlainTextResponse)
-    async def robokassa_result(request: Request) -> PlainTextResponse:
-        form = await request.form()
-        data = {str(key): str(value) for key, value in form.items()}
-        if not container.payment_service.verify_result_signature(data):
-            container.repository.log_event("robokassa_invalid_signature", data)
-            raise HTTPException(status_code=400, detail="invalid signature")
+    if container.settings.payment_mode == "robokassa":
+        @app.post("/payment/robokassa/result", response_class=PlainTextResponse)
+        async def robokassa_result(request: Request) -> PlainTextResponse:
+            form = await request.form()
+            data = {str(key): str(value) for key, value in form.items()}
+            if not container.payment_service.verify_result_signature(data):
+                container.repository.log_event("robokassa_invalid_signature", data)
+                raise HTTPException(status_code=400, detail="invalid signature")
 
-        inv_id_raw = data.get("InvId", "")
-        if not inv_id_raw.isdigit():
-            raise HTTPException(status_code=400, detail="invalid inv_id")
-        order = container.repository.get_order_by_payment_inv_id(int(inv_id_raw))
-        if order is not None:
-            shp_order_id = data.get("Shp_order_id", "")
-            if shp_order_id != order["order_id"]:
-                container.repository.log_event(
-                    "robokassa_shp_mismatch",
-                    {
-                        "inv_id": inv_id_raw,
-                        "shp_order_id": shp_order_id,
-                        "expected_order_id": order["order_id"],
-                    },
-                )
-                raise HTTPException(status_code=400, detail="invalid shp_order_id")
-
-            expected_out_sum = f"{int(order['price_rub']):.2f}"
-            got_out_sum = _normalize_amount(data.get("OutSum", ""))
-            if got_out_sum != expected_out_sum:
-                container.repository.log_event(
-                    "robokassa_out_sum_mismatch",
-                    {
-                        "inv_id": inv_id_raw,
-                        "order_id": order["order_id"],
-                        "got_out_sum": got_out_sum,
-                        "expected_out_sum": expected_out_sum,
-                    },
-                )
-                raise HTTPException(status_code=400, detail="invalid out_sum")
-
-        result = container.order_flow.handle_successful_payment_webhook(
-            inv_id=int(inv_id_raw),
-            out_sum=data.get("OutSum", ""),
-            payment_status_text="webhook_paid",
-        )
-        container.repository.log_event(
-            "robokassa_result_webhook",
-            {
-                "updated": result.updated,
-                "reason": result.reason,
-                "inv_id": inv_id_raw,
-                "order_id": result.order["order_id"] if result.order else None,
-            },
-        )
-
-        if result.updated and result.order is not None:
-            await notify_payment_confirmed(container, bot, result.order)
-
-        return PlainTextResponse(content=f"OK{inv_id_raw}")
-
-    @app.get("/payment/robokassa/fail")
-    async def robokassa_fail(request: Request) -> RedirectResponse:
-        params = {str(key): str(value) for key, value in request.query_params.items()}
-        inv_id_raw = params.get("InvId", "")
-        redirect_to = f"https://t.me/{container.settings.bot_username}"
-        order_id = None
-
-        if inv_id_raw.isdigit():
+            inv_id_raw = data.get("InvId", "")
+            if not inv_id_raw.isdigit():
+                raise HTTPException(status_code=400, detail="invalid inv_id")
             order = container.repository.get_order_by_payment_inv_id(int(inv_id_raw))
             if order is not None:
-                order_id = order["order_id"]
-                redirect_to = f"https://t.me/{container.settings.bot_username}?start=payfail_{order_id}"
+                shp_order_id = data.get("Shp_order_id", "")
+                if shp_order_id != order["order_id"]:
+                    container.repository.log_event(
+                        "robokassa_shp_mismatch",
+                        {
+                            "inv_id": inv_id_raw,
+                            "shp_order_id": shp_order_id,
+                            "expected_order_id": order["order_id"],
+                        },
+                    )
+                    raise HTTPException(status_code=400, detail="invalid shp_order_id")
 
-        container.repository.log_event(
-            "robokassa_fail_redirect",
-            {
-                "inv_id": inv_id_raw,
-                "order_id": order_id,
-                "params": params,
-            },
-        )
-        return RedirectResponse(url=redirect_to, status_code=302)
+                expected_out_sum = f"{int(order['price_rub']):.2f}"
+                got_out_sum = _normalize_amount(data.get("OutSum", ""))
+                if got_out_sum != expected_out_sum:
+                    container.repository.log_event(
+                        "robokassa_out_sum_mismatch",
+                        {
+                            "inv_id": inv_id_raw,
+                            "order_id": order["order_id"],
+                            "got_out_sum": got_out_sum,
+                            "expected_out_sum": expected_out_sum,
+                        },
+                    )
+                    raise HTTPException(status_code=400, detail="invalid out_sum")
+
+            result = container.order_flow.handle_successful_payment_webhook(
+                inv_id=int(inv_id_raw),
+                out_sum=data.get("OutSum", ""),
+                payment_status_text="webhook_paid",
+            )
+            container.repository.log_event(
+                "robokassa_result_webhook",
+                {
+                    "updated": result.updated,
+                    "reason": result.reason,
+                    "inv_id": inv_id_raw,
+                    "order_id": result.order["order_id"] if result.order else None,
+                },
+            )
+
+            if result.updated and result.order is not None:
+                await notify_payment_confirmed(container, bot, result.order)
+
+            return PlainTextResponse(content=f"OK{inv_id_raw}")
+
+        @app.get("/payment/robokassa/fail")
+        async def robokassa_fail(request: Request) -> RedirectResponse:
+            params = {str(key): str(value) for key, value in request.query_params.items()}
+            inv_id_raw = params.get("InvId", "")
+            redirect_to = f"https://t.me/{container.settings.bot_username}"
+            order_id = None
+
+            if inv_id_raw.isdigit():
+                order = container.repository.get_order_by_payment_inv_id(int(inv_id_raw))
+                if order is not None:
+                    order_id = order["order_id"]
+                    redirect_to = f"https://t.me/{container.settings.bot_username}?start=payfail_{order_id}"
+
+            container.repository.log_event(
+                "robokassa_fail_redirect",
+                {
+                    "inv_id": inv_id_raw,
+                    "order_id": order_id,
+                    "params": params,
+                },
+            )
+            return RedirectResponse(url=redirect_to, status_code=302)
 
     if container.settings.debug_storage_enabled:
         @app.get("/debug/storage")

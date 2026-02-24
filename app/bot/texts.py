@@ -33,11 +33,22 @@ def product_confirmation_text(product: Product) -> str:
 def order_wait_pay_text(
     product: Product,
     order_id: str,
+    payment_mode: str,
     payment_test_mode: bool,
     *,
     price_rub: int | None = None,
 ) -> str:
     amount_rub = price_rub if price_rub is not None else product.price_rub
+    if payment_mode == "manual":
+        return (
+            f"Заказ создан: {order_id}\n"
+            f"Продукт: {product.name}\n"
+            f"Сумма: {amount_rub} ₽\n\n"
+            "Оплата подтверждается через скриншот "
+            f"(в комментарии укажите номер заказа {order_id})\n"
+            "Действие: нажмите «Оплатить»."
+        )
+
     extra = ""
     if payment_test_mode:
         extra = (
@@ -51,6 +62,23 @@ def order_wait_pay_text(
         "Оплата подтверждается автоматически - скриншот не нужен.\n"
         "Действие: нажмите «Оплатить»."
         f"{extra}"
+    )
+
+
+def manual_payment_details_text(
+    *,
+    order_id: str,
+    phone: str,
+    banks: str,
+    receiver: str,
+    card: str,
+) -> str:
+    return (
+        "Реквизиты для оплаты:\n"
+        f"СБП - по номеру телефона {phone}, {banks}, {receiver}\n"
+        f"По номеру карты: {card}\n\n"
+        "После оплаты отправьте скриншот в этот чат.\n"
+        f"В комментарии к переводу укажите номер заказа: {order_id}"
     )
 
 

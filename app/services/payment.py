@@ -53,6 +53,15 @@ class RobokassaService:
         description: str,
     ) -> PaymentLink:
         out_sum = f"{amount_rub:.2f}"
+        if self.settings.payment_mode == "manual":
+            return PaymentLink(
+                pay_url="",
+                success_url="",
+                fail_url="",
+                inv_id=inv_id,
+                out_sum=out_sum,
+                provider_mode="manual",
+            )
         if self.settings.payment_test_mode:
             return PaymentLink(
                 pay_url=self.settings.mock_payment_success_url,

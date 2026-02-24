@@ -9,4 +9,5 @@ rusbridge.db
 *.sqlite
 *.sqlite3
 .env
+tests/
 

@@ -160,6 +160,36 @@ class OrderFlowService:
         if order is None:
             return PaymentWebhookResult(order=None, updated=False, reason="order_not_found")
 
+        return self._confirm_wait_pay_order(
+            order=order,
+            out_sum=out_sum,
+            payment_status_text=payment_status_text,
+        )
+
+    def confirm_payment_manually(
+        self,
+        *,
+        order_id: str,
+        payment_status_text: str = "manual_screenshot_confirmed",
+    ) -> PaymentWebhookResult:
+        order = self.repository.get_order(order_id)
+        if order is None:
+            return PaymentWebhookResult(order=None, updated=False, reason="order_not_found")
+        out_sum = f"{int(order['price_rub']):.2f}"
+        return self._confirm_wait_pay_order(
+            order=order,
+            out_sum=out_sum,
+            payment_status_text=payment_status_text,
+        )
+
+    def _confirm_wait_pay_order(
+        self,
+        *,
+        order: dict[str, Any],
+        out_sum: str,
+        payment_status_text: str,
+    ) -> PaymentWebhookResult:
+        
         status = order["status"]
         already_paid_chain = {
             OrderStatus.PAID.value,

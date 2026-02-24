@@ -57,6 +57,7 @@ class Settings:
     owner_chat_id: int | None
     database_path: str
     products_file: str
+    payment_mode: str
     payment_test_mode: bool
     test_id: bool
     daily_order_limit: int
@@ -78,6 +79,10 @@ class Settings:
     timeout_scan_minutes: int
     operator_cooldown_seconds: int
     debug_storage_enabled: bool
+    manual_pay_phone: str
+    manual_pay_banks: str
+    manual_pay_receiver: str
+    manual_pay_card: str
 
 
 def load_settings(env_file: str = ".env") -> Settings:
@@ -96,6 +101,10 @@ def load_settings(env_file: str = ".env") -> Settings:
         required=True,
     )
     owner_chat_id_raw = _read_first(env, "USER_CHAT_ID", default=None)
+    payment_mode = (_read_first(env, "PAYMENT_MODE", default="manual") or "manual").strip().lower()
+    if payment_mode not in {"manual", "robokassa"}:
+        raise ValueError("PAYMENT_MODE must be one of: manual, robokassa")
+    require_robokassa = payment_mode == "robokassa"
 
     settings = Settings(
         bot_token=bot_token or "",
@@ -104,6 +113,7 @@ def load_settings(env_file: str = ".env") -> Settings:
         owner_chat_id=int(owner_chat_id_raw) if owner_chat_id_raw else None,
         database_path=_read_first(env, "SQLITE_DB_PATH", default="rusbridge.db") or "rusbridge.db",
         products_file=_read_first(env, "PRODUCTS_FILE", default="data/products.json") or "data/products.json",
+        payment_mode=payment_mode,
         payment_test_mode=_parse_bool(_read_first(env, "PAYMENT_TEST_MODE", default="true"), True),
         test_id=_parse_bool(_read_first(env, "TEST_ID", default="false"), False),
         daily_order_limit=_parse_int(_read_first(env, "DAILY_ORDER_LIMIT", default="5"), 5),
@@ -119,15 +129,18 @@ def load_settings(env_file: str = ".env") -> Settings:
             default="https://khabusiness.github.io/rusbridge-site/fail.html",
         )
         or "https://khabusiness.github.io/rusbridge-site/fail.html",
-        robokassa_merchant_login=_read_first(env, "ID_MAGAZIN_ROBOCASSA", required=True) or "",
-        robokassa_password1=_read_first(env, "PASSWORD_1", required=True) or "",
-        robokassa_password2=_read_first(env, "PASSWORD_2", required=True) or "",
+        robokassa_merchant_login=_read_first(
+            env, "ID_MAGAZIN_ROBOCASSA", required=require_robokassa, default=""
+        )
+        or "",
+        robokassa_password1=_read_first(env, "PASSWORD_1", required=require_robokassa, default="") or "",
+        robokassa_password2=_read_first(env, "PASSWORD_2", required=require_robokassa, default="") or "",
         robokassa_hash_algo=(
             _read_first(env, "ROBOCASSA_HASH_ALGO", default="md5") or "md5"
         ).lower(),
-        robokassa_result_url=_read_first(env, "RESULT_URL", required=True) or "",
-        robokassa_success_url=_read_first(env, "SUCCESS_URL", required=True) or "",
-        robokassa_fail_url=_read_first(env, "FAIL_URL", required=True) or "",
+        robokassa_result_url=_read_first(env, "RESULT_URL", required=require_robokassa, default="") or "",
+        robokassa_success_url=_read_first(env, "SUCCESS_URL", required=require_robokassa, default="") or "",
+        robokassa_fail_url=_read_first(env, "FAIL_URL", required=require_robokassa, default="") or "",
         robokassa_is_test=_parse_bool(_read_first(env, "ROBOCASSA_IS_TEST", default="false"), False),
         web_host=_read_first(env, "WEB_HOST", default="0.0.0.0") or "0.0.0.0",
         web_port=_parse_int(_read_first(env, "PORT", "WEB_PORT", default="8080"), 8080),
@@ -155,5 +168,10 @@ def load_settings(env_file: str = ".env") -> Settings:
             _read_first(env, "DEBUG_STORAGE_ENABLED", default="false"),
             False,
         ),
+        manual_pay_phone=_read_first(env, "MANUAL_PAY_PHONE", default="+79990000000") or "+79990000000",
+        manual_pay_banks=_read_first(env, "MANUAL_PAY_BANKS", default="Сбербанк/Т-Банк") or "Сбербанк/Т-Банк",
+        manual_pay_receiver=_read_first(env, "MANUAL_PAY_RECEIVER", default="Имя Отчество") or "Имя Отчество",
+        manual_pay_card=_read_first(env, "MANUAL_PAY_CARD", default="0000 0000 0000 0000")
+        or "0000 0000 0000 0000",
     )
     return settings

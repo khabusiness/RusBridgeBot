@@ -63,6 +63,12 @@ def payment_keyboard(
     )
 
 
+def manual_payment_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="💳 Оплатить", callback_data=f"pay_details:{order_id}")]]
+    )
+
+
 def payment_test_confirm_keyboard(order_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -88,6 +94,15 @@ def payment_retry_keyboard(payment_url: str, order_id: str) -> InlineKeyboardMar
     )
 
 
+def manual_payment_retry_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить", callback_data=f"pay_details:{order_id}")],
+            [InlineKeyboardButton(text="❌ Отменить заказ", callback_data=f"cancel:{order_id}")],
+        ]
+    )
+
+
 def client_confirm_keyboard(order_id: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
@@ -105,6 +120,15 @@ def admin_order_keyboard(order_id: str) -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="✅ DONE", callback_data=f"admin_done:{order_id}")],
             [InlineKeyboardButton(text="🔴 ERROR", callback_data=f"admin_error:{order_id}")],
             [InlineKeyboardButton(text="🧾 SEND TEMPLATE", callback_data=f"admin_template:{order_id}")],
+        ]
+    )
+
+
+def admin_payment_proof_keyboard(order_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💸 PAYMENT DONE", callback_data=f"admin_pay_done:{order_id}")],
+            [InlineKeyboardButton(text="🔁 REQUEST NEW SCREENSHOT", callback_data=f"admin_pay_retry:{order_id}")],
         ]
     )
 
