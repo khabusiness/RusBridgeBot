@@ -142,10 +142,11 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     def _variable_price_rub(usd_amount: int) -> int:
         return int(usd_amount * VARIABLE_PRICE_MARKUP * VARIABLE_PRICE_RUB_RATE)
 
-    async def ask_variable_amount(message: Message, product_code: str) -> None:
-        pending_claude_checkout_input.pop(message.from_user.id, None)
-        claude_precheck_passed.pop(message.from_user.id, None)
-        pending_variable_price_input[message.from_user.id] = product_code
+    async def ask_variable_amount(message: Message, product_code: str, *, tg_id: int | None = None) -> None:
+        owner_tg_id = tg_id if tg_id is not None else message.from_user.id
+        pending_claude_checkout_input.pop(owner_tg_id, None)
+        claude_precheck_passed.pop(owner_tg_id, None)
+        pending_variable_price_input[owner_tg_id] = product_code
         if product_code == NANO_BANANA_CODE:
             nano_hint = (
                 "Для Nano Banana:\n"
@@ -166,10 +167,11 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             "Введите целое число в USD (например: 10)."
         )
 
-    async def ask_claude_checkout_precheck(message: Message, product_code: str) -> None:
-        pending_variable_price_input.pop(message.from_user.id, None)
-        pending_claude_checkout_input[message.from_user.id] = product_code
-        claude_precheck_passed.pop(message.from_user.id, None)
+    async def ask_claude_checkout_precheck(message: Message, product_code: str, *, tg_id: int | None = None) -> None:
+        owner_tg_id = tg_id if tg_id is not None else message.from_user.id
+        pending_variable_price_input.pop(owner_tg_id, None)
+        pending_claude_checkout_input[owner_tg_id] = product_code
+        claude_precheck_passed.pop(owner_tg_id, None)
         await message.answer(
             "🟣 Claude Pro/Max: проверка перед оплатой\n"
             "1) Аккаунт на claude.ai уже создан.\n"
@@ -501,14 +503,14 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             if callback.message is None:
                 await callback.answer("Сообщение недоступно", show_alert=True)
                 return
-            await ask_variable_amount(callback.message, product.code)
+            await ask_variable_amount(callback.message, product.code, tg_id=callback.from_user.id)
             await callback.answer()
             return
         if product.provider == "claude":
             if callback.message is None:
                 await callback.answer("Сообщение недоступно", show_alert=True)
                 return
-            await ask_claude_checkout_precheck(callback.message, product.code)
+            await ask_claude_checkout_precheck(callback.message, product.code, tg_id=callback.from_user.id)
             await callback.answer()
             return
 
@@ -594,16 +596,16 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             if callback.message is None:
                 await callback.answer("Сообщение недоступно", show_alert=True)
                 return
-            await ask_variable_amount(callback.message, product.code)
-            await callback.answer()
-            return
+                await ask_variable_amount(callback.message, product.code, tg_id=callback.from_user.id)
+                await callback.answer()
+                return
         if product.provider == "claude":
             passed_code = claude_precheck_passed.get(callback.from_user.id)
             if passed_code != product.code:
                 if callback.message is None:
                     await callback.answer("Сначала пришлите checkout URL Claude", show_alert=True)
                     return
-                await ask_claude_checkout_precheck(callback.message, product.code)
+                await ask_claude_checkout_precheck(callback.message, product.code, tg_id=callback.from_user.id)
                 await callback.answer("Сначала проверим checkout URL", show_alert=True)
                 return
             claude_precheck_passed.pop(callback.from_user.id, None)
