@@ -54,6 +54,7 @@ POST_PAYMENT_PROVIDER_GUIDE_BY_PROVIDER: dict[str, Path] = {
     "cursor": Path("data/Cursore.jpg"),
     "copilot": Path("data/Copilot.jpg"),
 }
+SUPPORT_HINT = "Если нужна помощь, напишите: МОД: ваш вопрос"
 
 
 def _order_status_hint(status: str) -> str:
@@ -193,7 +194,8 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
             return
 
         await message.answer(
-            "Что оформить?",
+            "Что оформить?\n\n"
+            + SUPPORT_HINT,
             reply_markup=provider_picker_keyboard(container.products),
         )
 
@@ -300,7 +302,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data == "providers")
     async def show_providers(callback: CallbackQuery) -> None:
         await callback.message.answer(
-            "Что оформить?",
+            "Что оформить?\n\n" + SUPPORT_HINT,
             reply_markup=provider_picker_keyboard(container.products),
         )
         await callback.answer()
@@ -308,7 +310,7 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
     @router.callback_query(F.data == "choose_other")
     async def choose_other(callback: CallbackQuery) -> None:
         await callback.message.answer(
-            "Выберите подписку:",
+            "Выберите подписку:\n\n" + SUPPORT_HINT,
             reply_markup=provider_picker_keyboard(container.products),
         )
         await callback.answer()
@@ -758,7 +760,9 @@ def build_router(container: AppContainer, bot: Bot) -> Router:
         )
         if not waiting:
             await message.answer(
-                "Чтобы начать оформление, используйте /start или ссылку оффера."
+                "Чтобы начать оформление, используйте /start или ссылку оффера.\n"
+                "Команды: /help\n"
+                + SUPPORT_HINT
             )
             return
 
